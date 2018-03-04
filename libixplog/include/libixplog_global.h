@@ -4,9 +4,9 @@
 #include <QtCore/qglobal.h>
 
 #ifdef IXPLOG_LIB
-# define LIBQTLOG_EXPORT Q_DECL_EXPORT
+#define LIBQTLOG_EXPORT Q_DECL_EXPORT
 #else
-# define LIBQTLOG_EXPORT Q_DECL_IMPORT
+#define LIBQTLOG_EXPORT Q_DECL_IMPORT
 #endif
 
 #endif // LIBIXPLOG_GLOBAL_H
