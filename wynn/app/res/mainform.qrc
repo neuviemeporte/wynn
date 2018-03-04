@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="MainForm">
+    <file>../gfx/wynn-icon.png</file>
+    <file>../gfx/wynn.png</file>
+  </qresource>
+</RCC>

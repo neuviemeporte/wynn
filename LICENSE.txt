@@ -1,0 +1,9 @@
+Wynn (the UI application) is provided under the terms of the GPL 2 license,
+available at: http://www.gnu.org/licenses/gpl-2.0.txt
+
+The accompanying libraries (ixpdict, ixplog, ixptest) are provided under the
+terms of the LGPL 2.1 license, available at:
+https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt
+
+The texts of those licenses are also provided in the particular project
+directories.
