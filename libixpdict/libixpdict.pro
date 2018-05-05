@@ -29,3 +29,4 @@ SOURCES = \
 
 target.path = $$INSTALL_LIB
 INSTALLS += target
+QMAKE_RPATHDIR = $$INSTALL_LIB .

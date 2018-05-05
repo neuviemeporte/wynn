@@ -273,7 +273,7 @@ void Util::convertRomaji(QStringList &output, const QString &input, const QStrin
 	// Determine which kana characters match the beginning of the current input and call this function 
 	// recursively for each of them. Upon the call, the current buffer becomes the new accumulator, and
 	// the current input with the matched sequence cut out becomes the new input.
-    for (int i = 0; i < ROMAJI_COUNT; ++i)
+    for (int i = 0; i < static_cast<int>(ROMAJI_COUNT); ++i)
 	{
 		const QString romaji = QString::fromStdString(ROMAJI_TABLE[i]);
 		if (input.startsWith(romaji))
