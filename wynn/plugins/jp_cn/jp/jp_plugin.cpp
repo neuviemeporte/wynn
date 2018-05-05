@@ -10,7 +10,7 @@ QTSLogger *PLUGIN_LOGSTREAM = NULL;
 Q_EXPORT_PLUGIN2(jp_plugin, JpPlugin)
 #endif
 
-const QString JpPlugin::DICT_WORD = "dictionaries/JMdict_en.dat";
+const QString JpPlugin::DICT_WORD = "dictionaries/JMDict_en.dat";
 
 // ==============================================================================================
 // ============================== JpPlugin
