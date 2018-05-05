@@ -1165,17 +1165,21 @@ void MainForm::loadPlugins()
 	QLOGX("Loading dictionary plugins");
 	QLOGINC;
 
+    static const QString PLUG_WILDCARD("wynnplugin-*");
 #if defined(__linux__)
-    static const QString pluginExt(".so");
+    static const QString 
+            PLUG_PREFIX("lib"),
+            PLUG_EXT(".so");
 #elif defined(_WIN32)
-    static const QString pluginExt(".dll");
+    static const QString 
+            PLUG_PREFIX("");
+            PLUG_EXT(".dll");
 #else
-    static const QString pluginExt;
+#error Unrecognized target platform!
 #endif
 
 	QDir curDir;
-	QStringList pluginFilter;
-    pluginFilter << "wynnplugin-*" + pluginExt;
+    const QStringList pluginFilter(PLUG_PREFIX + PLUG_WILDCARD + PLUG_EXT); 
 	QStringList pluginFiles = curDir.entryList(pluginFilter, QDir::Files);
 	QLOG("Found plugins: " << pluginFiles.size());
 

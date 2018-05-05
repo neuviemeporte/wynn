@@ -10,18 +10,6 @@
 #include <QMainWindow>
 #include <QSortFilterProxyModel>
 
-// TODO:
-// ability to deactivate plugins in settings
-// clear dict result table after switch between languages
-// store column widths of tables in QSettings
-// word search click - most of this stuff belongs in the dictionary search function, not in the UI code
-// undo button in database manage panel?
-// find button in dictionary to search in dictionary search results
-// grab focus to appropriate line edit in database-popped dialogs
-// keep window size in settings (maximized status too?)
-// facilitate clipboard search
-// set text interaction flags to 'selectable by mouse' on some qlabels
-
 class Word;
 class HanCharacter;
 class Quiz;

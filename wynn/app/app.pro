@@ -35,4 +35,4 @@ win32:RC_ICONS = gfx/wynn-icon.ico
 
 target.path = $$INSTALL_BIN
 INSTALLS += target
-QMAKE_RPATHDIR = $$INSTALL_LIB
+QMAKE_RPATHDIR = $$INSTALL_LIB .

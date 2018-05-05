@@ -15,70 +15,76 @@ QTSLogger
 QTextStream qin(stdin), qout(stdout);
 
 const QString 
-	Task::KANJIDIC_XML = "dictionaries/kanjidic2.xml",
-	Task::KANJIDIC_DATA = "dictionaries/kanjidic.dat",
+	Task::KANJIDIC_XML     = "dictionaries/kanjidic2.xml",
+	Task::KANJIDIC_DATA    = "dictionaries/kanjidic.dat",
 	Task::KANJIDIC_UH_DATA = "dictionaries/kanjidic-uh.dat",
-	Task::RADKFILEX_TEXT = "dictionaries/radkfilex.utf8",
-	Task::RADKFILEX_DATA =  "dictionaries/radkfilex.dat",
-	Task::JMDICT_XML = "dictionaries/JMDict_e.xml",
-	Task::JMDICT_DATA = "dictionaries/JMDict_en.dat",
-	Task::CEDICT_TEXT = "dictionaries/cedict_ts.u8",
-	Task::CEDICT_DATA = "dictionaries/cedict.dat",
-	Task::BEO_TEXT = "dictionaries/de-en-2013.txt",
-	Task::BEO_DATA = "dictionaries/de_en.dat";
+	Task::RADKFILEX_TEXT   = "dictionaries/radkfilex.utf8",
+	Task::RADKFILEX_DATA   = "dictionaries/radkfilex.dat",
+	Task::JMDICT_XML       = "dictionaries/JMDict_e.xml",
+	Task::JMDICT_DATA      = "dictionaries/JMDict_en.dat",
+	Task::CEDICT_TEXT      = "dictionaries/cedict_ts.u8",
+	Task::CEDICT_DATA      = "dictionaries/cedict.dat",
+	Task::BEO_TEXT         = "dictionaries/de-en-2013.txt",
+	Task::BEO_DATA         = "dictionaries/de_en.dat";
 
 void Task::run()
 {
 	IXPDICT_LOGREDIR(dicttool_logstream);
+    bool quit = false;
 
-	qout << "DICTTOOL - repackage various dictionaries off the 'net" << endl;
-	qout << "into binary format for use with Wynn." << endl;
-	qout << "All dictionaries are (C) by their respective copyright owners" << endl;
-	qout << "==========================================================================" << endl;
-	qout << "1 - Chinese character dictionary (KANJIDIC and Unihan database)" << endl;
-	qout << "2 - Chinese character radical lookup database (RADKFILEX)" << endl;
-	qout << "3 - Japanese vocabulary dictionary (JMDict)" << endl;
-	qout << "4 - Chinese vocabulary dictionary (CEDICT)" << endl;
-	qout << "5 - German dictionary (Beolingus)" << endl;
-	qout << "6 - Test German dictionary" << endl; // todo: out
-	qout << "7 - Exit" << endl;
+    while (!quit) 
+    {
+        qout << "DICTTOOL - repackage various dictionaries off the 'net" << endl
+             << "into binary format for use with Wynn." << endl
+             << "All dictionaries are (C) by their respective copyright owners" << endl
+             << "==========================================================================" << endl
+             << "1 - Chinese character dictionary (KANJIDIC and Unihan database)" << endl
+             << "2 - Chinese character radical lookup database (RADKFILEX)" << endl
+             << "3 - Japanese vocabulary dictionary (JMDict)" << endl
+             << "4 - Chinese vocabulary dictionary (CEDICT)" << endl
+             << "5 - German dictionary (Beolingus)" << endl
+             << "6 - Prepare all (perform steps 1-5) and exit" << endl // todo: out
+             << "7 - Exit" << endl;        
+        
+        const QString selectionStr = qin.readLine();
+        bool ok = false, all = false;
+        const int selection = selectionStr.toInt(&ok);
+        
+        if (!ok) 
+        {
+            qout << "Invalid input: '" << selectionStr << "'" << endl;
+            break;
+        }
+        
+        switch (selection)
+        {
+        case 6:
+            all = true; // fallthrough
+        case 1:
+            processUnihanKanjidic();
+            if (!all) break; // fallthrough
+        case 2:
+            processRadkfile();
+            if (!all) break; // fallthrough
+        case 3:
+            processJMDict();
+            if (!all) break; // fallthrough
+        case 4:
+            processCedict();
+            if (!all) break; // fallthrough
+        case 5:
+            processBeolingus();
+            if (!all) break; // fallthrough
+        case 7:
+            qout << "Exiting..." << endl;
+            quit = true;
+            break;
+        default:
+            qout << "Invalid selection: " << selection << endl;
+            break;
+        }
 
-
-	const QString selectionStr = qin.readLine();
-	bool ok = false;
-	const int selection = selectionStr.toInt(&ok);
-
-	if (ok) switch(selection)
-	{
-	case 1:
-		processUnihanKanjidic();
-		break;
-	case 2:
-		processRadkfile();
-		break;
-	case 3:
-		processJMDict();
-		break;
-	case 4:
-		processCedict();
-		break;
-	case 5:
-		processBeolingus();
-		break;
-	case 6:
-		testBeolingus();
-		break;
-	case 7:
-		qout << "Exiting..." << endl;
-		break;
-	default:
-		qout << "Invalid selection" << endl;
-		break;
-	}
-	else
-	{
-		qout << "Invalid input: '" << selectionStr << "'" << endl;
-	}
+    }
 
 	emit finished();
 }

@@ -19,3 +19,4 @@ SOURCES += de_plugin.cpp
 
 target.path = $$INSTALL_LIB
 INSTALLS += target
+QMAKE_RPATHDIR = $$INSTALL_LIB .
