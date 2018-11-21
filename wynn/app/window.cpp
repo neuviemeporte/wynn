@@ -44,6 +44,19 @@ const QString
 	MainForm::SETT_NODUPS = "nodbdups", 
 	MainForm::SETT_CURDB  = "curdb";
 
+namespace {
+const QString PLUG_WILDCARD("wynnplugin-*");
+#if defined(__linux__)
+const QString PLUG_PREFIX("lib");
+const QString PLUG_EXT(".so");
+#elif defined(_WIN32)
+const QString PLUG_PREFIX("");
+const QString PLUG_EXT(".dll");
+#else
+#error Unrecognized target platform!
+#endif
+} // namespace
+
 // ==============================================================================================
 // ============================== MainForm: public
 // ==============================================================================================
@@ -1164,19 +1177,6 @@ void MainForm::loadPlugins()
 {
 	QLOGX("Loading dictionary plugins");
 	QLOGINC;
-
-    static const QString PLUG_WILDCARD("wynnplugin-*");
-#if defined(__linux__)
-    static const QString 
-            PLUG_PREFIX("lib"),
-            PLUG_EXT(".so");
-#elif defined(_WIN32)
-    static const QString 
-            PLUG_PREFIX("");
-            PLUG_EXT(".dll");
-#else
-#error Unrecognized target platform!
-#endif
 
 	QDir curDir;
     const QStringList pluginFilter(PLUG_PREFIX + PLUG_WILDCARD + PLUG_EXT); 
