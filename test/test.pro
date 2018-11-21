@@ -5,6 +5,7 @@ CONFIG += console c++11
 CONFIG -= app_bundle
 CONFIG += thread
 CONFIG += qt
+TARGET = test
 
 TOPDIR = ..
 include($$TOPDIR/common.pri)
