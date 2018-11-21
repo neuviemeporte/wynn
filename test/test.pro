@@ -14,8 +14,8 @@ INCLUDEPATH += $$IXPLOG/include $$IXPDICT/include
 LIBS += -lixplog -lixpdict
 
 SOURCES += \
-    main.cpp \
-    dict_test.cpp
+    dict_test.cpp \
+    main.cpp
 
 HEADERS += \
     log.hpp
