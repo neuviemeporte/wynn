@@ -2,6 +2,7 @@
 *.autosave
 Makefile
 *.o
+*.orig
 moc_*
 qrc_*
 ui_*
