@@ -30,14 +30,13 @@ TEST(DictTest, Sanity) {
 
     // add some items and extract them
     vector<Foo> foo{Foo{1}, Foo{2}, Foo{3}};
-    const int addCount = static_cast<int>(foo.size()) - 1;
-    ASSERT_LT(addCount, foo.size());
+    auto addCount = foo.size() - 1;
     auto it = foo.begin();
-    for (int i = 0; i < addCount; ++i) {
+    for (size_t i = 0; i < addCount; ++i) {
         LOG("Adding item " << *it);
         dict.addEntry(*it++);
     }
-    EXPECT_EQ(dict.entryCount(), addCount);
+    EXPECT_EQ(static_cast<size_t>(dict.entryCount()), addCount);
     LOG("Dictionary contents:");
     for (int i = 0; i < dict.entryCount(); ++i) {
         LOG("Item " << i << ": " << dict.entry(i));
@@ -45,12 +44,12 @@ TEST(DictTest, Sanity) {
     }
 
     // add more items and check contents of all items
-    const int remainCount = static_cast<int>(foo.size()) - addCount;
-    for (int i = 0; i < remainCount; ++i) {
+    auto remainCount = foo.size() - addCount;
+    for (size_t i = 0; i < remainCount; ++i) {
         LOG("Adding item " << *it);
         dict.addEntry(*it++);
     }
-    EXPECT_EQ(dict.entryCount(), foo.size());
+    EXPECT_EQ(static_cast<size_t>(dict.entryCount()), foo.size());
     LOG("Dictionary contents:");
     for (int i = 0; i < dict.entryCount(); ++i) {
         LOG("Item " << i << ": " << dict.entry(i));
