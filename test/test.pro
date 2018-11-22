@@ -15,8 +15,8 @@ LIBS += -lixplog -lixpdict
 
 SOURCES += \
     dict_test.cpp \
-    main.cpp \
-    hanchar_test.cpp
+    hanchar_test.cpp \
+    main.cpp
 
 HEADERS += \
     log.hpp
