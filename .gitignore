@@ -1,2 +1,9 @@
 *.pro.user
 *.autosave
+Makefile
+*.o
+moc_*
+qrc_*
+ui_*
+build-debug/*
+.qmake.stash
