@@ -211,7 +211,6 @@ void MainForm::addDatabase(Database *dbase)
 {
     Q_ASSERT(dbase);
     QLOGX("Adding handle for database '" << dbase->name() << "'");
-    dbase->setParent(this);
     databases_.append(dbase);
 }
 
@@ -1118,7 +1117,12 @@ void MainForm::slot_setupDone()
 	dbaseProxyModel_.setSortRole(Qt::UserRole);
 	ui_.databaseTable->setModel(&dbaseProxyModel_);
 
-	// fill database selection combo box with databases created from user xml files on startup
+    // reparent the database items to the main window, this causes events to get sent so it can't
+    // be done from the setup thread
+    for (auto dbase : databases_) {
+        if (!dbase->parent()) dbase->setParent(this);
+    }
+    // fill database selection combo box with databases created from user xml files on startup
 	updateDbaseCombo(true);
 
 	QLOGDEC;
@@ -1451,36 +1455,35 @@ void MainForm::updateDbaseCombo(bool restore)
 {
 	int selidx = 0;
 	ui_.databaseCombo->clear();
-	if (!databases_.empty())
-	{
-		QLOGX("Filling combo box with data for " << databases_.size() << " disk databases");
-		QLOGINC;
-		ui_.databaseCombo->blockSignals(true);
-		for (int i = 0; i < databases_.size(); ++i)
-		{
-			Database *dbase = databases_[i];
-			ui_.databaseCombo->addItem(dbase->name());
-			if (dbase->name() == firstDbase_) selidx = i;
-		}
-		// restore stored default database index from settings if requested. Can't to this reliably when changing the user dir,
-		// only on startup
-		if (restore)
-		{
-			ui_.databaseCombo->setCurrentIndex(selidx);
-			QLOG("Set current index to " << selidx << " (" << ui_.databaseCombo->currentText() << ")");
-		}
-		// have to invoke manually in case stored index was 0 (treated as no change and hence no signal emitted) 
-		slot_database_changeCurrent(ui_.databaseCombo->currentText());
+    if (databases_.empty())
+    {
+        QLOGX("Database combo is empty");
+        ui_.databaseCombo->setEnabled(false);
+        return;
+    }
 
-		ui_.databaseCombo->setEnabled(true);	
-		ui_.databaseCombo->blockSignals(false);
-		QLOGDEC;
-	}
-	else
-	{
-		QLOGX("Database combo is empty");
-		ui_.databaseCombo->setEnabled(false);
-	}
+    QLOGX("Filling combo box with data for " << databases_.size() << " disk databases");
+    QLOGINC;
+    ui_.databaseCombo->blockSignals(true);
+    for (int i = 0; i < databases_.size(); ++i)
+    {
+        Database *dbase = databases_[i];
+        ui_.databaseCombo->addItem(dbase->name());
+        if (dbase->name() == firstDbase_) selidx = i;
+    }
+    // restore stored default database index from settings if requested. Can't to this reliably when changing the user dir,
+    // only on startup
+    if (restore)
+    {
+        ui_.databaseCombo->setCurrentIndex(selidx);
+        QLOG("Set current index to " << selidx << " (" << ui_.databaseCombo->currentText() << ")");
+    }
+    // have to invoke manually in case stored index was 0 (treated as no change and hence no signal emitted)
+    slot_database_changeCurrent(ui_.databaseCombo->currentText());
+
+    ui_.databaseCombo->setEnabled(true);
+    ui_.databaseCombo->blockSignals(false);
+    QLOGDEC;
 }
 
 /// Find index of a given text within a combo box. Returns -1 if not found.
