@@ -48,7 +48,7 @@ void SetupThread::run()
     QList<Database*> dbs;
     dbs.append(loadDbases(parent_->APPDIR, false));
     dbs.append(loadDbases(parent_->extDir_, true));
-    QLOG("Got " << dbs.size() << "in total");
+    QLOG("Got " << dbs.size() << " databases in total");
     QThread *appThread = QApplication::instance()->thread();
     for (int i = 0; i < dbs.size(); ++i)
     {
