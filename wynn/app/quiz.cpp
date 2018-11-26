@@ -66,7 +66,7 @@ Quiz::Quiz(Database *database, const QuizSettings &settings, QDialog *dialog, Ui
 	QLOGDEC;
 }
 
-Quiz::Quiz(Database *database, const QuizSettings &settings, const QList<int> idxs, QDialog *dialog, Ui::QuizDialog *dialogUI) :
+Quiz::Quiz(Database *database, const QuizSettings &settings, const QList<int> &idxs, QDialog *dialog, Ui::QuizDialog *dialogUI) :
 	QObject(GUI), dbase_(database),
 	type_(settings.type),
 	dialog_(dialog), dialogUI_(dialogUI)

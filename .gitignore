@@ -8,6 +8,7 @@ Makefile.*
 *.pdb
 *.orig
 *.res
+*.rc
 moc_*
 qrc_*
 ui_*

@@ -59,7 +59,7 @@ protected:
 
 public:
 	Quiz(Database *database, const QuizSettings &settings, QDialog *dialog, Ui::QuizDialog *dialogUI);
-	Quiz(Database *database, const QuizSettings &settings, const QList<int> idxs, QDialog *dialog, Ui::QuizDialog *dialogUI);
+    Quiz(Database *database, const QuizSettings &settings, const QList<int> &idxs, QDialog *dialog, Ui::QuizDialog *dialogUI);
 	~Quiz();
 
 	int questionCount() const { return questions_.count(); }
