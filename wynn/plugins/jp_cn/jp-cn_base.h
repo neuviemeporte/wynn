@@ -94,8 +94,6 @@ private slots:
 	void charSearchButtonClicked();
 	void wordSearchButtonClicked();
 
-	void kanjiAddClicked();
-	void wordAddClicked();
 	void kanjiCopyClicked();
 	void wordCopyClicked();
 	

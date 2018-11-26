@@ -74,12 +74,10 @@ JpCnPluginBase::JpCnPluginBase() : QObject(), DictionaryPlugin(),
 
 	QLOG("Setting up kanji details dialog");
 	kanjiUI_.setupUi(kanjiDialog_);
-	connect(kanjiUI_.detAddButton,  SIGNAL(clicked()), this, SLOT(kanjiAddClicked()));
-	connect(kanjiUI_.detCopyButton, SIGNAL(clicked()), this, SLOT(kanjiCopyClicked()));
+    connect(kanjiUI_.detCopyButton, SIGNAL(clicked()), this, SLOT(kanjiCopyClicked()));
 
 	QLOG("Setting up word details dialog");
 	wordUI_.setupUi(wordDialog_);
-	connect(wordUI_.detAddButton,  SIGNAL(clicked()), this, SLOT(wordAddClicked()));
 	connect(wordUI_.detCopyButton, SIGNAL(clicked()), this, SLOT(wordCopyClicked()));
 
 	QLOGDEC;
@@ -211,12 +209,13 @@ void JpCnPluginBase::preSetup(QWidget *parent, class QTSLogger *debugLog)
 	wordDialog_->setParent(parent, flags);
 
 	// connect signals to and from application
-	connect(this, SIGNAL(searchStart()),                     app_, SLOT(slot_dict_searchStart()));
-	connect(this, SIGNAL(searchDone()),                      app_, SLOT(slot_dict_searchDone()));
-	connect(this, SIGNAL(message(const QString &)),          app_, SLOT(slot_updateSetupMsg(const QString &)));
-
-	connect(parent, SIGNAL(dictColumnResized(int, int, int, int)), this,   SLOT(columnResize(int, int, int, int)));
-	connect(this,   SIGNAL(columnWidthsNotify(const QList<int>&)), parent, SLOT(slot_dict_resizeColumns(const QList<int>&)));
+    connect(this,                  SIGNAL(searchStart()),                         parent, SLOT(slot_dict_searchStart()));
+    connect(this,                  SIGNAL(searchDone()),                          parent, SLOT(slot_dict_searchDone()));
+    connect(this,                  SIGNAL(message(const QString &)),              parent, SLOT(slot_updateSetupMsg(const QString &)));
+    connect(this,                  SIGNAL(columnWidthsNotify(const QList<int>&)), parent, SLOT(slot_dict_resizeColumns(const QList<int>&)));
+    connect(parent,                SIGNAL(dictColumnResized(int, int, int, int)), this,   SLOT(columnResize(int, int, int, int)));
+    connect(kanjiUI_.detAddButton, SIGNAL(clicked()),                             parent, SLOT(slot_dict_toDbaseClicked()));
+    connect(wordUI_.detAddButton,  SIGNAL(clicked()),                             parent, SLOT(slot_dict_toDbaseClicked()));
 
     QLOGDEC;
 }
@@ -549,14 +548,6 @@ void JpCnPluginBase::wordSearchButtonClicked()
 	emit searchDone();
 
 	QLOGDEC;
-}
-
-void JpCnPluginBase::kanjiAddClicked()
-{
-}
-
-void JpCnPluginBase::wordAddClicked()
-{
 }
 
 void JpCnPluginBase::kanjiCopyClicked()
