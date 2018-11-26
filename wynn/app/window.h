@@ -134,6 +134,7 @@ protected:
 	QList<int> getSelectedDbaseTableIdxs();
 	void copyToAnotherDatabase(bool move);
 	void popDbaseLocked();
+    void addToDatabase(const QString &item, const QString &desc);
 
 	void setQuizControlsEnabled(bool arg);
 	DbEntry::QuizDirection curQuizType() const;
