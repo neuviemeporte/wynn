@@ -505,18 +505,22 @@ void MainForm::slot_database_createClicked()
 
 void MainForm::slot_database_deleteClicked()
 {
-	int idx = ui_.databaseCombo->currentIndex();
+    QLOG("Database delete button clicked");
 	Database *dbase = curDbase_;
-	if (!dbase) return;
+	if (!dbase) {
+        QLOGX("Current database is null!");
+        return;
+    }
 
-	int ans = QMessageBox::question(this, "Question", QString("Are you sure you want to delete the database '")
-		+ dbase->name() + "'?", QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+	if (QMessageBox::question(this, "Question", tr("Are you sure you want to delete the database '") + dbase->name() + "'?", 
+                              QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes) 
+    {
+        QLOGX("User declined database deletion");
+        return;
+    } 
 
-	if (ans == QMessageBox::No) return;
-
-	QLOG("Removing database, index: " << idx << ", name: " << dbase->name() 
-		<< " (combo text: " << ui_.databaseCombo->currentText() << ")" );
-	QLOGINC;
+    const int idx = ui_.databaseCombo->currentIndex();
+	QLOG("Removing database, index: " << idx << ", name: " << dbase->name() << " (combo text: " << ui_.databaseCombo->currentText() << ")");
 
 	const QString xmlpath = (dbase->external() ? extDir_ : APPDIR) + "/" + dbase->name() + Database::XML_EXT;
 	QLOG("Removing data file '" << xmlpath << "'");
@@ -526,10 +530,13 @@ void MainForm::slot_database_deleteClicked()
 		QLOG("Unable to remove file! (Error: " << file.error() << ")");
 	}
 
-	delete dbase;
-	dbaseModel_->setDatabase(NULL);
-	curDbase_ = NULL;
+    // disconnect signals from model to database
+	dbaseModel_->setDatabase(nullptr);
+	curDbase_ = nullptr;
 	databases_.removeAt(idx);
+    delete dbase;
+    
+    // disable UI elements if no databases left
 	if (databases_.empty()) 
 	{
 		ui_.databaseCombo->setEnabled(false);
@@ -541,7 +548,6 @@ void MainForm::slot_database_deleteClicked()
 		ui_.quizTakeSpin->setMaximum(0);
 	}
 	ui_.databaseCombo->removeItem(idx);
-	QLOGDEC;
 }
 
 // add buton clicked in database panel
