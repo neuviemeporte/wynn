@@ -860,61 +860,73 @@ void MainForm::slot_database_quizClicked()
 	if (!curDbase_)
 	{
 		QMessageBox::information(this, tr("No database"), 
-			tr("No user database exists. You must first create one\nand add items to it to run a quiz"));
+			tr("No user database exists. You must first create one and add items to it to run a quiz"));
 		return;
 	}
-	if (curDbase_->locked()) { popDbaseLocked(); return; }
-	QLOG("Database quiz button clicked");
-	QLOGINC;
+    
+    if (quiz_) {
+        QLOGX("Previous quiz instance not cleaned up before trying to start new one!");
+        return;
+    }
+    
+	if (curDbase_->locked()) { 
+        popDbaseLocked(); 
+        return; 
+    }
 
-	QuizSettings qset;
+	QuizSettings settings;
+	settings.type = curQuizType();
+    QLOG("Database quiz button clicked, type = " << settings.type);
 
-	qset.type = curQuizType();
-
-	qset.range = ui_.quizRangeCheck->isChecked();
-	qset.rangeFrom = ui_.quizRangeFromSpin->value();
-	qset.rangeTo = ui_.quizRangeToSpin->value();
+	settings.range = ui_.quizRangeCheck->isChecked();
+	settings.rangeFrom = ui_.quizRangeFromSpin->value();
+	settings.rangeTo = ui_.quizRangeToSpin->value();
 	// range inside database index is taken care of automatically, can't select higher index in spinbox
-	if (qset.rangeFrom >= qset.rangeTo) 
+	if (settings.range && settings.rangeFrom >= settings.rangeTo) 
 	{
-		QMessageBox::information(this, tr("Bad range"), tr("Lower limit for range must be less than upper limit."));
-		QLOGDEC;
+		QMessageBox::information(this, tr("Bad range"), tr("\"From\" value for index must be less than \"To\" value."));
 		return;
 	}
 
-	qset.level = ui_.quizPointsCheck->isChecked();
-	qset.levelFrom = ui_.quizPointsFromSpin->value();
-	qset.levelTo = ui_.quizPointsToSpin->value();
-	if (qset.levelFrom >= qset.levelTo) 
+	settings.level = ui_.quizPointsCheck->isChecked();
+	settings.levelFrom = ui_.quizPointsFromSpin->value();
+	settings.levelTo = ui_.quizPointsToSpin->value();
+	if (settings.level && settings.levelFrom >= settings.levelTo) 
 	{
-		QMessageBox::information(this, tr("Bad range"), tr("Lower limit for points must be less than the upper limit."));
-		QLOGDEC;
+		QMessageBox::information(this, tr("Bad range"), tr("\"From\" value for level must be less than \"To\" value."));
 		return;
 	}
 
-	setQuizControlsEnabled(false);
-
-	qset.take = ui_.quizTakeCheck->isChecked();
-	qset.takeCount = ui_.quizTakeSpin->value();
-	if      (ui_.quizTakeFailRadio->isChecked())   qset.takeMode = TAKE_FAILS;
-	else if (ui_.quizTakeOldieRadio->isChecked())  qset.takeMode = TAKE_OLDIES;
-	else if (ui_.quizTakeRandomRadio->isChecked()) qset.takeMode = TAKE_RANDOM;
+	settings.take = ui_.quizTakeCheck->isChecked();
+	settings.takeCount = ui_.quizTakeSpin->value();
+	if      (ui_.quizTakeFailRadio->isChecked())   settings.takeMode = TAKE_FAILS;
+	else if (ui_.quizTakeOldieRadio->isChecked())  settings.takeMode = TAKE_OLDIES;
+	else if (ui_.quizTakeRandomRadio->isChecked()) settings.takeMode = TAKE_RANDOM;
 
 	// retrieve selected indices from database table
 	QList<int> selidxs = getSelectedDbaseTableIdxs();
 	if (selidxs.count() > 1) 
 	{
 		QLOG("Adding quiz questions based on selection inside database table");
-		quiz_ =  new Quiz(curDbase_, qset, selidxs, quizDialog_, &quizDialogUI_);
+		quiz_ =  new Quiz(curDbase_, settings, selidxs, quizDialog_, &quizDialogUI_);
 	}
 	else
 	{
 		QLOG("Adding quiz questions based on selected criteria");
-		quiz_ =  new Quiz(curDbase_, qset, quizDialog_, &quizDialogUI_);
+		quiz_ =  new Quiz(curDbase_, settings, quizDialog_, &quizDialogUI_);
 	}
-	connect(quiz_, SIGNAL(done()), this, SLOT(slot_quizDone()));
+    
+    if (quiz_->empty())
+	{
+		QMessageBox::information(this, tr("No questions"), 
+			tr("The current combination of quiz settings yielded no questions to be asked. "
+               "Change the settings or select some entries from the table by hand and try again."));
+		return;
+	}
+    
+    setQuizControlsEnabled(false);
+    connect(quiz_, SIGNAL(done()), this, SLOT(slot_quizDone()));
 	quiz_->run();
-	QLOGDEC;
 }
 
 void MainForm::slot_database_quizTypeChanged()

@@ -237,14 +237,6 @@ void Quiz::randomizeOrder()
 
 void Quiz::run()
 {
-	if (questions_.empty())
-	{
-		QMessageBox::information(GUI, tr("No questions"), 
-			tr("The current combination of quiz settings yielded no questions to be asked.\n") 
-			+ tr("Change the settings or select some entries from the table by hand and try again."));
-		emit done();
-		return;
-	}
 	QLOGX("Starting quiz, type: " << type_);
 	QLOGINC;
 	randomizeOrder();
