@@ -39,6 +39,7 @@ QWidget *GUI;
 QTSLogger *APP_LOGSTREAM = NULL;
 
 const QString 
+    MainForm::VERSION     = "0.9.6",
 	MainForm::APPDIR      = QDir::homePath() + "/.wynn",
 	MainForm::SETT_EXTDIR = "extdir", 
 	MainForm::SETT_NODUPS = "nodbdups", 
@@ -79,6 +80,8 @@ MainForm::MainForm(QWidget *parent) : QMainWindow(parent),
 	QLOG("Setting up interface");
 	ui_.setupUi(this);
 	GUI = this;
+
+    ui_.versionLabel->setText(ui_.versionLabel->text().replace("%VER%", VERSION));
 
 	QString build = ui_.buildLabel->text() + "\nBuild: " + __DATE__ + " " + __TIME__;
 #ifdef _DEBUG

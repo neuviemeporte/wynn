@@ -31,7 +31,7 @@ class MainForm : public QMainWindow
 	Q_OBJECT
 
 private:
-    static const QString APPDIR, SETT_EXTDIR, SETT_NODUPS, SETT_CURDB;
+    static const QString VERSION, APPDIR, SETT_EXTDIR, SETT_NODUPS, SETT_CURDB;
 
     Ui::MainFormClass ui_;
     Ui::DbaseEntryDialog dbaseDialogUI_;
