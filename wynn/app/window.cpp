@@ -1480,8 +1480,14 @@ QList<int> MainForm::getSelectedDbaseTableIdxs()
 // unite and export them here
 void MainForm::copyToAnotherDatabase(bool move)
 {
-	// setup database entry dialog, disable editing, enable combobox
+    // setup database entry dialog: disable item/desc editing, enable database selection combobox
 	setupDbaseDialogCombo(false, false);
+    if (dbaseDialogUI_.dbaseCombo->count() == 0) {
+        QLOG("Target database selection combo is empty after setup, unable to proceed");
+        QMessageBox::information(this, tr("Information"), tr("Unable to perform operation. There are no databases to copy/move to."));
+        return;
+    }
+
 	dbaseDialogUI_.dbaseCombo->setEnabled(true);
 	dbaseDialogUI_.entryEdit->setEnabled(false);
 	dbaseDialogUI_.descEdit->setEnabled(false);
@@ -1494,7 +1500,7 @@ void MainForm::copyToAnotherDatabase(bool move)
 		dbaseDialog_->setWindowTitle("Copy item(s) to another database");
 	}
 
-	// retrieve selected indexes (may copy in bulk)
+    // retrieve indexes of selected database items (may copy in bulk)
 	QList<int> dbIdxs = getSelectedDbaseTableIdxs();
 	// return if no selection
 	if (dbIdxs.isEmpty()) 
@@ -1510,97 +1516,103 @@ void MainForm::copyToAnotherDatabase(bool move)
 	}
 	QLOGRAW(endl);
 
-	if (curDbase_ != NULL)
-	{
-		// if only one item selected, fill dialog with its data
-		if (dbIdxs.size() == 1)
-		{
-			QLOG("Single item mode");
-			const DbEntry &entry = curDbase_->entry(dbIdxs.at(0));
-			dbaseDialogUI_.entryEdit->setText(entry.item());
-			dbaseDialogUI_.descEdit->setText(entry.description());
-		}
-		// otherwise indicate multiple selections
-		else
-		{
-			QLOG("Multiple items mode");
-			dbaseDialogUI_.entryEdit->setText(tr(" -- multiple -- "));
-			dbaseDialogUI_.descEdit->setText(tr(" -- multiple -- "));
-		}
-		// pop dialog and continue if ok clicked
-		if (dbaseDialog_->exec() == QDialog::Accepted)
-		{
-			// find target database
-            const QString comboText = dbaseDialogUI_.dbaseCombo->currentText();
-            Database *target = database(comboText);
-			QLOG("Copying " << dbIdxs.size() <<  " item(s) to database '" 
-				<< target->name() << "'" );
+    if (curDbase_ == nullptr) {
+        QLOG("Current database handle is null!");
+        return;
+    }
 
-            // bulk copy items to target database from current database
-            // does it even make sense to have this function? perhaps, if DbError
-            // held all the error indices, it would be possible to add in bulk and
-            // then process the remainder as per user answer(s)
-            //DbError error = target->add(curDbase_, dbIdxs);
+    // if only one item selected, fill dialog with its data
+    if (dbIdxs.size() == 1)
+    {
+        QLOG("Single item mode");
+        const DbEntry &entry = curDbase_->entry(dbIdxs.at(0));
+        dbaseDialogUI_.entryEdit->setText(entry.item());
+        dbaseDialogUI_.descEdit->setText(entry.description());
+    }
+    // otherwise indicate multiple selections
+    else
+    {
+        QLOG("Multiple items mode");
+        dbaseDialogUI_.entryEdit->setText(tr(" -- multiple -- "));
+        dbaseDialogUI_.descEdit->setText(tr(" -- multiple -- "));
+    }
 
-            int answer = QMessageBox::NoButton;
-			QList<int> okIdxs;
-			for (int i = 0; i < dbIdxs.size(); ++i)
-			{
-				const DbEntry &entry = curDbase_->entry(dbIdxs.at(i));
-                const QString
-                        itemText = entry.item(),
-                        descText = entry.description();
+    // pop dialog and continue if ok clicked
+    if (dbaseDialog_->exec() != QDialog::Accepted) {
+        QLOG("User cancelled operation");
+        return;
+    }
 
-				// if go-ahead given, ignore duplicates
-				if (answer == QMessageBox::YesToAll)
-				{
-                    DbError error = target->add(itemText, descText, true);
-                    Q_ASSERT(error == DbError::ERROR_OK);
-					if (move) okIdxs.append(dbIdxs.at(i));
-				}
-                // don't ignore duplicates (yet)
-				else
-				{
-                    DbError error = target->add(itemText, descText, false);
-					// check error type, 
-                    if (error == DbError::ERROR_OK)
-					{
-						// in move mode, add index to successfully copied list for later removal from source
-						if (move) okIdxs.append(dbIdxs.at(i));
-						continue;
-					}
-					// if duplicate detected, warn
-                    else if (error == DbError::ERROR_DUPLI && answer != QMessageBox::NoToAll)
-					{
-                        const DbEntry &dupEntry = target->entry(error.index());
-						answer = QMessageBox::information(this, tr("Duplicate entry"), 
-                            tr("Possible duplicate found for '") + entry.item() + "' (" + entry.description() +
-                            tr(") in target database: '") + dupEntry.item() + "' (" + dupEntry.description() +
-                            tr("). Continue?"),
-							QMessageBox::Yes | QMessageBox::No | QMessageBox::YesToAll | QMessageBox::NoToAll);
-					}
-					// retry item add with duplicates ignored on "yes" or "yes to all"
-					if (answer == QMessageBox::Yes || answer == QMessageBox::YesToAll)
-					{
-                        error = target->add(itemText, descText, true);
-                        Q_ASSERT(error == DbError::ERROR_OK);
-						if (move) okIdxs.append(dbIdxs.at(i));
-					}
-				}
-			}
+    // find target database
+    Database *target = database(dbaseDialogUI_.dbaseCombo->currentText());
+    if (target == nullptr) {
+        QLOG("Target database handle is null!");
+        return;
+    }
+
+    QLOG("Copying " << dbIdxs.size() <<  " item(s) to database '"
+         << target->name() << "'" );
+
+    // bulk copy items to target database from current database
+    // TODO: does it even make sense to have this function? perhaps, if DbError
+    // held all the error indices, it would be possible to add in bulk and
+    // then process the remainder as per user answer(s)
+    int answer = QMessageBox::NoButton;
+    QList<int> okIdxs;
+    for (int i = 0; i < dbIdxs.size(); ++i)
+    {
+        const DbEntry &entry = curDbase_->entry(dbIdxs.at(i));
+        const QString
+                itemText = entry.item(),
+                descText = entry.description();
+
+        // if go-ahead given, ignore duplicates
+        if (answer == QMessageBox::YesToAll)
+        {
+            DbError error = target->add(itemText, descText, true);
+            Q_ASSERT(error == DbError::ERROR_OK);
+            if (move) okIdxs.append(dbIdxs.at(i));
+        }
+        // don't ignore duplicates (yet)
+        else
+        {
+            DbError error = target->add(itemText, descText, false);
+            // check error type,
+            if (error == DbError::ERROR_OK)
+            {
+                // in move mode, add index to successfully copied list for later removal from source
+                if (move) okIdxs.append(dbIdxs.at(i));
+                continue;
+            }
+            // if duplicate detected, warn
+            else if (error == DbError::ERROR_DUPLI && answer != QMessageBox::NoToAll)
+            {
+                const DbEntry &dupEntry = target->entry(error.index());
+                answer = QMessageBox::information(this, tr("Duplicate entry"),
+                                                  tr("Possible duplicate found for '") + entry.item() + "' (" + entry.description() +
+                                                  tr(") in target database: '") + dupEntry.item() + "' (" + dupEntry.description() +
+                                                  tr("). Continue?"),
+                                                  QMessageBox::Yes | QMessageBox::No | QMessageBox::YesToAll | QMessageBox::NoToAll);
+            }
+            // retry item add with duplicates ignored on "yes" or "yes to all"
+            if (answer == QMessageBox::Yes || answer == QMessageBox::YesToAll)
+            {
+                error = target->add(itemText, descText, true);
+                if (error != DbError::ERROR_OK) {
+                    QLOG("Unable to add to database despite ignoring duplicates?! (" << error.msg() << ")");
+                    return;
+                }
+                if (move) okIdxs.append(dbIdxs.at(i));
+            }
+        }
+    }
 
 
-			if (move) 
-			{
-				QLOG("Removing item(s) from source database");
-                curDbase_->remove(okIdxs);
-			}
-		}
-		else
-		{
-			QLOG("User cancelled operation");
-		}
-	}
+    if (move)
+    {
+        QLOG("Removing item(s) from source database");
+        curDbase_->remove(okIdxs);
+    }
 }
 
 void MainForm::popDbaseLocked()
