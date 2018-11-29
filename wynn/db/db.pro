@@ -6,6 +6,10 @@ TOPDIR = ../..
 include($$TOPDIR/common.pri)
 
 INCLUDEPATH += $$IXPLOG/include
+HEADERS = database.h entry.h error.h common.h
+SOURCES = database.cpp entry.cpp common.cpp
 
-HEADERS = database.h
-SOURCES = database.cpp database_xml.cpp 
+CONFIG(distributed) {
+HEADERS += clocks.h event.h distributed.h
+SOURCES += clocks.cpp event.cpp distributed.cpp
+}
