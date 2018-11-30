@@ -1,31 +1,39 @@
-#pragma once
+#ifndef SETUP_H
+#define SETUP_H
 
 #include <QThread>
+#include <QList>
 
-class MainForm;
-class DatabaseModel;
-class JmDict;
-class Cedict;
-class Kanjidic;
-class Radkfilex;
+namespace wynn {
+
+namespace db {
 class Database;
-template <typename T> class QList;
+class Model;
+} // namespace db
+
+namespace app {
+class MainForm;
 
 class SetupThread : public QThread
 {
-	Q_OBJECT
+    Q_OBJECT
 
 private:
     MainForm *parent_;
 
 public:
-	SetupThread(MainForm *parent);
+    SetupThread(MainForm *parent);
 
-	virtual void run();
+    virtual void run();
 
-    static QList<Database*> loadDbases(const QString &dirPath, const bool external);
+    static QList<db::Database*> loadDbases(const QString &dirPath, const bool external);
 
 signals:
-	void message(const QString &msg);
-	void error(const QString &msg);
+    void message(const QString &msg);
+    void error(const QString &msg);
 };
+
+} // namespace app
+} // namespace wynn
+
+#endif // SETUP_H

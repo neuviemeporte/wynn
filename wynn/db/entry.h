@@ -26,6 +26,7 @@ public:
     XML_DESCPOINTS, XML_DESCFAILS, XML_ITEMPOINTS, XML_ITEMFAILS;
     
 private:
+    static const int MAX_POINTS = 100;
     QUuid uuid_;
     qint64 createStamp_, updateStamp_;
     QString item_, desc_;

@@ -17,9 +17,10 @@ namespace db {
 /// TODO: updated_ not updated, how ironic.
 class Database : public QObject {
     Q_OBJECT
+public:
+    static const QString XML_EXT, XML_HEADER, XML_NAME;
     
 protected:
-    static const QString XML_EXT, XML_HEADER, XML_NAME;
     QString name_;
     QDateTime created_, updated_;
     QList<Entry> entries_;

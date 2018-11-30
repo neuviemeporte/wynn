@@ -1,426 +1,358 @@
+#include <ctime>
+#include <cstdlib>
+#include <algorithm>
+#include <random>
+#include <QMessageBox>
+
 #include "quiz.h"
 #include "database.h"
 #include "global.h"
-
-#include <ctime>
-#include <cstdlib>
-#include <QMessageBox>
-#include <ixplog_active.h>
-
+#include "ixplog_active.h"
 #define QUIZDEBUG 1
 
-// comparison functions for sorting the questions according to level or number of failures for the appropriate quiz type
-bool showDescFailCompare(const QuizQuestion &arg1, const QuizQuestion &arg2)
-{
-    return (arg1.entry().fails(DbEntry::DIR_SHOWDESC) < arg2.entry().fails(DbEntry::DIR_SHOWDESC));
-}
+using namespace wynn::db;
 
-bool showItemFailCompare(const QuizQuestion &arg1, const QuizQuestion &arg2)
-{
-    return (arg1.entry().fails(DbEntry::DIR_SHOWITEM) < arg2.entry().fails(DbEntry::DIR_SHOWITEM));
-}
-
-bool dateCompare(const QuizQuestion &arg1, const QuizQuestion &arg2)
-{
-    return (arg1.entry().updateStamp() < arg2.entry().updateStamp());
-}
+namespace wynn {
+namespace app {
 
 // todo: undo button in quiz dialog
-
 Quiz::Quiz(Database *database, const QuizSettings &settings, QDialog *dialog, Ui::QuizDialog *dialogUI) : 
-	QObject(GUI), dbase_(database),
-	type_(settings.type),
-	dialog_(dialog), dialogUI_(dialogUI)
+    QObject(GUI), dbase_(database),
+    type_(settings.type),
+    dialog_(dialog), dialogUI_(dialogUI)
 {
-	QLOGX("Creating new quiz from database '" << dbase_->name() << "', items: " << dbase_->entryCount() << ", criteria-based" 
-		<< ", type: " << type_);
-	QLOGINC;
+    QLOGX("Creating new quiz from database '" << dbase_->name() << "', items: " << dbase_->entryCount() << ", criteria-based"
+          << ", type: " << type_);
+    QLOGINC;
 
-	// TODO: override dialog's close event to finish quiz silently
-	connectSignals();
-	dbase_->setLocked(true);
+    // TODO: override dialog's close event to finish quiz silently
+    srand(time(NULL));
+    connectSignals();
+    dbase_->setLocked(true);
 
-	if (settings.range)
-	{
-		QLOG("Range criterium active");
-		addByRange(settings.rangeFrom, settings.rangeTo);
-	}
-	else
-	{
-		QLOG("Range criterium inactive");
-		addAll();
-	}
+    if (settings.range)
+    {
+        QLOG("Range criterium active");
+        addByRange(settings.rangeFrom, settings.rangeTo);
+    }
+    else
+    {
+        QLOG("Range criterium inactive");
+        addAll();
+    }
 
-	if (settings.level)
-	{
-		QLOG("Level criterium active");
-		eliminateByLevel(settings.levelFrom, settings.levelTo);
-	}
+    if (settings.level)
+    {
+        QLOG("Level criterium active");
+        eliminateByLevel(settings.levelFrom, settings.levelTo);
+    }
 
-	if (settings.take)
-	{
-		QLOG("Take criterium active");
-		eliminateByTake(settings.takeCount, settings.takeMode);
-	}
+    if (settings.take)
+    {
+        QLOG("Take criterium active");
+        eliminateByTake(settings.takeCount, settings.takeMode);
+    }
 
-	QLOGDEC;
+    QLOGDEC;
 }
 
 Quiz::Quiz(Database *database, const QuizSettings &settings, const QList<int> &idxs, QDialog *dialog, Ui::QuizDialog *dialogUI) :
-	QObject(GUI), dbase_(database),
-	type_(settings.type),
-	dialog_(dialog), dialogUI_(dialogUI)
+    QObject(GUI), dbase_(database),
+    type_(settings.type),
+    dialog_(dialog), dialogUI_(dialogUI)
 {
-	QLOGX("Creating new quiz from database '" << dbase_->name() << "', items: " << dbase_->entryCount() 
-		<< ", from provided list of " << idxs.size() << " indices, type: " << type_);
-	QLOGINC;
+    QLOGX("Creating new quiz from database '" << dbase_->name() << "', items: " << dbase_->entryCount()
+          << ", from provided list of " << idxs.size() << " indices, type: " << type_);
+    QLOGINC;
 
-	connectSignals();
-	dbase_->setLocked(true);
-	addByIndex(idxs);
+    connectSignals();
+    dbase_->setLocked(true);
+    addByIndex(idxs);
 
-	QLOGDEC;
+    QLOGDEC;
 }
 
-Quiz::~Quiz() 
-{ 
-	dbase_->setLocked(false); 
+Quiz::~Quiz() { 
+    dbase_->setLocked(false);
 }
 
-void Quiz::logQuestions()
-{
+void Quiz::logQuestions() {
 #ifdef QUIZDEBUG
-	QLOG("Questions (" << questions_.count() << "):");
-	QLOGINC;
-
-	for (int i = 0; i < questions_.count(); ++i)
-	{
-        const QuizQuestion &q = questions_.at(i);
+    QLOG("Questions (" << questionCount() << "):");
+    for (auto &q : questions_){
         QLOG("entry: " << q.entry() << ", result: " << q.result());
-	}
-	QLOGDEC;
+    }
 #endif
 }
 
 void Quiz::addByIndex(const QList<int> &idxs)
 {
-	QLOGX("Adding  " << idxs.count() << " questions.");
-	for (int i = 0; i < idxs.count(); ++i)
-	{	
-        QuizQuestion q(dbase_->entry(idxs.at(i)));
-        questions_.append(q);
-	}
-	logQuestions();
+    QLOGX("Adding  " << idxs.count() << " questions.");
+    for (int i : idxs) {
+        questions_.emplace_back(dbase_->entry(i), i);
+    }
+    logQuestions();
 }
 
 void Quiz::addByRange(int from, int to)
 {
-	Q_ASSERT(to > from);
-	from--;
-	to--;
-	QLOGX("Range from: " << from << ", to: " << to);
-	QLOGINC;
-	QList<int> idxs;
-	for (int i = from; i <= to; ++i)
-	{
-        QuizQuestion q(dbase_->entry(i));
-        questions_.append(q);
-	}
-	logQuestions();
-	QLOGDEC;
+    Q_ASSERT(to > from);
+    // TODO: why?
+    from--;
+    to--;
+    QLOGX("Range from: " << from << ", to: " << to);
+    for (int i = from; i <= to; ++i) {
+        questions_.emplace_back(dbase_->entry(i), i);
+    }
+    logQuestions();
 }
 
-void Quiz::addAll()
-{
-	QLOGX("Adding  " << dbase_->entryCount() << " questions.");
-    QLOGINC;
+void Quiz::addAll() {
+    QLOGX("Adding  " << dbase_->entryCount() << " questions.");
+    for (int i = 0; i < dbase_->entryCount(); ++i) {
+        questions_.emplace_back(dbase_->entry(i), i);
+    }
+    logQuestions();
+}
 
-	for (int i = 0; i < dbase_->entryCount(); ++i)
-	{	
-        QuizQuestion q(dbase_->entry(i));
-        questions_.append(q);
-	}
+void Quiz::eliminateByLevel(int from, int to) {
+    Q_ASSERT(to > from);
+    QLOGX("Eliminating quiz questions by level, from: " << from << ", to: " << to);
+    for (auto it = questions_.begin(); it != questions_.end();)
+    {
+        const Entry& entry = it->entry();
+        const int level = entry.level(type_);
 
-	logQuestions();
+        if (level < from || level > to)
+            it = questions_.erase(it);
+        else
+            ++it;
+    }
+    logQuestions();
     QLOGDEC;
 }
 
-void Quiz::eliminateByLevel(int from, int to)
-{
-	Q_ASSERT(to > from);
-	QLOGX("Eliminating quiz questions by level, from: " << from << ", to: " << to);
-	QLOGINC;
-	QList<int> idxs;
-	for (int i = 0; i < questions_.count(); ++i)
-	{
-        const DbEntry& entry = questions_.at(i).entry();
-		int level = 0;
+void Quiz::eliminateByTake(const int takeCount, const QuizTakeMode mode) {
+    if ( questionCount() <= takeCount ) {
+        QLOGX("Question count (" << questionCount() << " ) already less than criterium count (" << takeCount << ")");
+        return;
+    }
 
-        level = entry.level(type_);
+    QLOGX("Eliminating questions by take criterium, mode: " << mode
+          << " from current " << questionCount() << " to target count: " << takeCount);
 
-		if (level < from || level > to)
-		{
-			idxs.append(i);
-		}
-	}
-	for (int i = idxs.size() - 1; i >= 0; --i)
-	{
-		questions_.removeAt(idxs.at(i));
-	}
+    if ( mode == TAKE_FAILS ) {
+        QLOG("Sorting by fail count, type: " << type_);
+        std::sort(questions_.begin(), questions_.end(), [&](auto &arg1, auto &arg2){
+            return (arg1.entry().fails(type_) < arg2.entry().fails(type_));
+        });
 
-	logQuestions();
-	QLOGDEC;
+        // remove fail count-sorted questions from list until desired number left
+        questions_.erase( questions_.begin(), questions_.begin() + std::min( questionCount(), takeCount ) );
+        // don't include 0-fails questions in quiz, remove further
+        std::remove_if(questions_.begin(), questions_.end(), [&](auto &q){
+            return q.entry().fails( type_ ) == 0;
+        });
+    }
+    else if ( mode == TAKE_OLDIES ) {
+        QLOG("Sorting by update date");
+        std::sort(questions_.begin(), questions_.end(), [](auto &arg1, auto &arg2){
+            return arg1.entry().updateStamp() > arg2.entry().updateStamp();
+        });
+
+        questions_.erase( questions_.begin(), questions_.begin() + std::min( questionCount(), takeCount ) );
+    }
+    else if ( mode == TAKE_RANDOM ) {
+        QLOG("Eliminating randomly");
+        std::random_device rd;
+        std::mt19937 g(rd());
+        std::shuffle( questions_.begin(), questions_.end(), g );
+        questions_.erase( questions_.begin(), questions_.begin() + std::min( questionCount(), takeCount ) );
+    }
+
+    QLOG("Trimmed to size, question count: " << questionCount());
+    Q_ASSERT(questionCount() <= takeCount);
+    logQuestions();
+    QLOGDEC;
 }
 
-void Quiz::eliminateByTake(int count, QuizTakeMode mode)
-{
-	if (questions_.count() <= count) return;
-	QLOGX("Eliminating questions by take criterion, mode: " << mode << " from current " << questionCount() << " to target count: " << count);
-	QLOGINC;
-
-	if (mode == TAKE_FAILS)
-	{
-		QLOG("Sorting by fail count, type: " << type_);
-		if (type_ == DbEntry::DIR_SHOWDESC)
-		{
-			qSort(questions_.begin(), questions_.end(), showDescFailCompare);
-		}
-		else if (type_ == DbEntry::DIR_SHOWITEM)
-		{
-			qSort(questions_.begin(), questions_.end(), showItemFailCompare);
-		}
-		// remove fail count-sorted questions from list until desired number left
-		while (questions_.count() > count) questions_.removeFirst();
-		QLOG("Trimmed to size, question count: " << questionCount());
-		// don't include 0-fails questions in quiz, remove further
-        while (!questions_.empty() && questions_.first().entry().fails(type_) == 0) questions_.removeFirst();
-	}
-	else if (mode == TAKE_OLDIES)
-	{
-		QLOG("Sorting by update date");
-		qSort(questions_.begin(), questions_.end(), dateCompare);
-		while (questions_.count() > count) questions_.removeLast();
-	}
-	else if (mode == TAKE_RANDOM)
-	{
-		QLOG("Eliminating randomly");
-		srand(time(NULL));
-		while (questions_.count() > count)
-		{
-			questions_.removeAt(rand() % questions_.count());
-		}
-	}
-
-	logQuestions();
-	QLOGDEC;
-}
-
-void Quiz::connectSignals()
-{
-	connect(dialogUI_->correctButton, SIGNAL(clicked()), this, SLOT(correctClicked()));
-	connect(dialogUI_->incorrectButton, SIGNAL(clicked()), this, SLOT(incorrectClicked()));
-	connect(dialogUI_->unsureButton, SIGNAL(clicked()), this, SLOT(unsureClicked()));
-	connect(dialogUI_->revealButton, SIGNAL(clicked()), this, SLOT(revealClicked()));
-	connect(dialogUI_->closeButton, SIGNAL(clicked()), this, SLOT(closeClicked()));
+void Quiz::connectSignals() {
+    connect(dialogUI_->correctButton,   SIGNAL(clicked()), this, SLOT(correctClicked()));
+    connect(dialogUI_->incorrectButton, SIGNAL(clicked()), this, SLOT(incorrectClicked()));
+    connect(dialogUI_->unsureButton,    SIGNAL(clicked()), this, SLOT(unsureClicked()));
+    connect(dialogUI_->revealButton,    SIGNAL(clicked()), this, SLOT(revealClicked()));
+    connect(dialogUI_->closeButton,     SIGNAL(clicked()), this, SLOT(closeClicked()));
 }
 
 void Quiz::randomizeOrder()
 {
-	QLOGX("Randomizing questions' order");
-	srand(time(NULL));
-	for (int i = 0; i < questions_.count(); ++i)
-	{
-		questions_.swap(i, (rand() % questions_.count())); // random number from 0 to (count - 1)
-	}
-	logQuestions();
+    QLOGX("Randomizing questions' order");
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle( questions_.begin(), questions_.end(), g );
+    logQuestions();
 }
 
 void Quiz::run()
 {
-	QLOGX("Starting quiz, type: " << type_);
-	QLOGINC;
-	randomizeOrder();
-	question_ = -1;
-	correct_ = incorrect_ = unsure_ = 0;
-	nextQuestion();
-	dialog_->setWindowTitle(tr("Quiz") + " (" + dbase_->name() + ")");
-	dialog_->show();
-	QLOGDEC;
+    QLOGX("Starting quiz, type: " << type_);
+    randomizeOrder();
+    questionIndex_ = -1;
+    correct_ = incorrect_ = unsure_ = 0;
+    nextQuestion();
+    dialog_->setWindowTitle(tr("Quiz") + " (" + dbase_->name() + ")");
+    dialog_->show();
 }
 
-void Quiz::finish(bool keep)
-{
-	dbase_->setLocked(false);
-	if (keep)
-	{
+void Quiz::finish(const bool keep) {
+    dbase_->setLocked(false);
+    if (keep) {
         const float
-            correctPt = float(correct_*100)/question_,
-            incorrectPt = float(incorrect_*100)/question_,
-            unsurePt = float(unsure_*100)/question_;
+                correctPt = float(correct_*100)/questionIndex_,
+                incorrectPt = float(incorrect_*100)/questionIndex_,
+                unsurePt = float(unsure_*100)/questionIndex_;
 
-		QMessageBox::information(GUI, tr("Done"), tr("Quiz completed.\n\nQuestions asked: ") 
-			+ QString::number(question_) + " of " + QString::number(questions_.count()) 
-			+ " (" + QString::number(float(question_*100)/questions_.count(),'f',2) + "%)\n"
-            + tr("Correct answers: ") + QString::number(correct_) + " (" + QString::number(correctPt,'f',2) + "%)\n"
-            + tr("Incorrect answers: ") + QString::number(incorrect_) + " (" + QString::number(incorrectPt,'f',2) + "%)\n"
-            + tr("Unsure answers: ") + QString::number(unsure_) + " (" + QString::number(unsurePt,'f',2) + "%)\n");
-		saveResults();
-	}
-	dialog_->hide();
-	emit done();
+        QMessageBox::information(GUI, tr("Done"), tr("Quiz completed.\n\nQuestions asked: ")
+                                 + QString::number(questionIndex_) + " of " + QString::number(questionCount())
+                                 + " (" + QString::number(float(questionIndex_*100)/questionCount(),'f',2) + "%)\n"
+                                 + tr("Correct answers: ") + QString::number(correct_) + " (" + QString::number(correctPt,'f',2) + "%)\n"
+                                 + tr("Incorrect answers: ") + QString::number(incorrect_) + " (" + QString::number(incorrectPt,'f',2) + "%)\n"
+                                 + tr("Unsure answers: ") + QString::number(unsure_) + " (" + QString::number(unsurePt,'f',2) + "%)\n");
+        saveResults();
+    }
+    dialog_->hide();
+    emit done();
 }
 
 void Quiz::saveResults()
 {
-	QLOGX("Saving quiz results back to database");
-	for (int i = 0; i < question_; ++i)
-	{
+    QLOGX("Saving quiz results back to database");
+    // update entries only up to the answered question index
+    for (int i = 0; i < questionIndex_; ++i)
+    {
         const QuizQuestion &q = questions_.at(i);
 
-        if (q.result() != QuizQuestion::NOCHANGE)
-        {
-            // todo: make questions_ into list of structs holding DbEntries and their database indices, avoid uuid lookup?
-            // otoh, this is cheap once dbase::entries_ is made into QHash<QUuid,DbEntry>
-            const int idx = dbase_->entryIndex(q.entry().uuid());
+        if ( q.result() == QuizQuestion::NOCHANGE )
+            continue;
 
-            switch(q.result())
-            {
-                case QuizQuestion::SUCCESS: dbase_->point(idx, type_); break;
-                case QuizQuestion::FAIL:    dbase_->fail(idx, type_);  break;
-                default: break;
-            }
+        switch ( q.result() ) {
+        case QuizQuestion::SUCCESS: dbase_->point(q.index(), type_); break;
+        case QuizQuestion::FAIL:    dbase_->fail(q.index(), type_);  break;
+        default: break;
         }
-	}
+    }
 }
 
 void Quiz::nextQuestion()
 {
-	question_++;
-	if (question_ >= questions_.count()) { finish(true); return; }
+    questionIndex_++;
+    if (questionIndex_ >= questionCount()) { finish(true); return; }
 
-	QLOGX("Showing next question, number: " << question_);
-	dialogUI_->progressLabel->setText(QString::number(question_ + 1) + " / " + QString::number(questions_.count()));
-	dialogUI_->correctButton->setEnabled(false);
-	dialogUI_->incorrectButton->setEnabled(false);
-	dialogUI_->unsureButton->setEnabled(false);
-	dialogUI_->revealButton->setEnabled(true);
+    QLOGX("Showing next question, number: " << questionIndex_);
+    dialogUI_->progressLabel->setText(QString::number(questionIndex_ + 1) + " / " + QString::number(questionCount()));
+    dialogUI_->correctButton->setEnabled(false);
+    dialogUI_->incorrectButton->setEnabled(false);
+    dialogUI_->unsureButton->setEnabled(false);
+    dialogUI_->revealButton->setEnabled(true);
 
-    const QuizQuestion &question = questions_.at(question_);
-	Q_ASSERT(type_ == DbEntry::DIR_SHOWITEM || type_ == DbEntry::DIR_SHOWDESC);
+    const QuizQuestion &question = questions_.at(questionIndex_);
+    Q_ASSERT(type_ == db::DIR_SHOWITEM || type_ == db::DIR_SHOWDESC);
 
     QString questionText;
     switch(type_)
     {
-        case DbEntry::DIR_SHOWITEM: questionText = question.entry().item(); break;
-        case DbEntry::DIR_SHOWDESC: questionText = question.entry().description(); break;
-        default: break;
+    case db::DIR_SHOWITEM: questionText = question.entry().item(); break;
+    case db::DIR_SHOWDESC: questionText = question.entry().description(); break;
+    default: break;
     }
     dialogUI_->questionLabel->setText(questionText);
     dialogUI_->answerLabel->setText("");
 }
 
-void Quiz::revealAnswer()
-{
-	QLOGX("Revealing answer for question number " << question_);
-	dialogUI_->correctButton->setEnabled(true);
-	dialogUI_->incorrectButton->setEnabled(true);
-	dialogUI_->unsureButton->setEnabled(true);
-	dialogUI_->revealButton->setEnabled(false);
+void Quiz::revealAnswer() {
+    QLOGX("Revealing answer for question number " << questionIndex_);
+    dialogUI_->correctButton->setEnabled(true);
+    dialogUI_->incorrectButton->setEnabled(true);
+    dialogUI_->unsureButton->setEnabled(true);
+    dialogUI_->revealButton->setEnabled(false);
 
-    Q_ASSERT(question_ >= 0 && question_ < questions_.count());
-    const QuizQuestion &question = questions_.at(question_);
-	Q_ASSERT(type_ == DbEntry::DIR_SHOWITEM || type_ == DbEntry::DIR_SHOWDESC);
+    Q_ASSERT(questionIndex_ >= 0 && questionIndex_ < questionCount());
+    const QuizQuestion &question = questions_.at(questionIndex_);
+    Q_ASSERT(type_ == db::DIR_SHOWITEM || type_ == db::DIR_SHOWDESC);
 
     QString answerText;
-    switch(type_)
-    {
-        case DbEntry::DIR_SHOWITEM: answerText = question.entry().description(); break;
-        case DbEntry::DIR_SHOWDESC: answerText = question.entry().item(); break;
-        default: break;
+    switch(type_) {
+    case db::DIR_SHOWITEM: answerText = question.entry().description(); break;
+    case db::DIR_SHOWDESC: answerText = question.entry().item(); break;
+    default: break;
     }
     dialogUI_->answerLabel->setText(answerText);
 
-    const int idx = dbase_->entryIndex(question.entry().uuid());
     const QString progressText = dialogUI_->progressLabel->text() +
-            tr(" (Index: ") + QString::number(idx + 1) +
+            tr(" (Index: ") + QString::number(question.index() + 1) +
             tr(", Level: ") + QString::number(question.entry().level(type_)) +
             tr(", Failures: ") + QString::number(question.entry().fails(type_)) + ")";
-	dialogUI_->progressLabel->setText(progressText);
+    dialogUI_->progressLabel->setText(progressText);
 }
 
-void Quiz::correctClicked()
-{
-	QLOGX("CORRECT answer in quiz");
-	QLOGINC;
-	correct_++;
-    QuizQuestion &question = questions_[question_];
-    question.setResult(QuizQuestion::SUCCESS);
-	nextQuestion();
-	QLOGDEC;
+void Quiz::correctClicked() {
+    QLOGX("CORRECT answer in quiz");
+    correct_++;
+    questions_[questionIndex_].setResult(QuizQuestion::SUCCESS);
+    nextQuestion();
 }
 
-void Quiz::incorrectClicked()
-{
-	QLOGX("INCORRECT answer in quiz");
-	QLOGINC;
-	incorrect_++;
-    QuizQuestion &question = questions_[question_];
-    question.setResult(QuizQuestion::FAIL);
-	nextQuestion();
-	QLOGDEC;
+void Quiz::incorrectClicked() {
+    QLOGX("INCORRECT answer in quiz");
+    incorrect_++;
+    questions_[questionIndex_].setResult(QuizQuestion::FAIL);
+    nextQuestion();
 }
 
-void Quiz::unsureClicked()
-{
-	QLOGX("UNSURE answer in quiz");
-	QLOGINC;
-	unsure_++;
-    QuizQuestion &question = questions_[question_];
-    question.setResult(QuizQuestion::NOCHANGE);
-	nextQuestion();
-	QLOGDEC;
+void Quiz::unsureClicked() {
+    QLOGX("UNSURE answer in quiz");
+    unsure_++;
+    questions_[questionIndex_].setResult(QuizQuestion::NOCHANGE);
+    nextQuestion();
 }
 
-void Quiz::revealClicked()
-{
-	QLOGX("Reveal button clicked");
-	QLOGINC;
-	revealAnswer();
-	QLOGDEC;
+void Quiz::revealClicked() {
+    QLOGX("Reveal button clicked");
+    revealAnswer();
 }
 
-void Quiz::closeClicked()
-{
-	QLOGX("Close button clicked");
-	QLOGINC;
+void Quiz::closeClicked() {
+    QLOGX("Close button clicked");
 
     // nothing answered yet, no results so close without further questions
-	if (question_ == 0) { finish(false); QLOGDEC; return; }
+    if ( questionIndex_ == 0 ) {
+        finish(false);
+        return;
+    }
 
     QMessageBox::StandardButtons buttons;
     QString msg;
 
     // dialog not yet closed, still visible and quiz can be resumed
-	if (dialog_->isVisible()) 
-	{
+    if (dialog_->isVisible()) {
         buttons = QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel;
-		msg = tr("Quiz will be interrupted. "); 
-	}
+        msg = tr("Quiz will be interrupted. ");
+    }
     // dialog already closed by [x] button with mouse
-    else
-    {
+    else {
         buttons = QMessageBox::Yes | QMessageBox::No;
         msg = tr("Quiz was interrupted. ");
     }
 
-    const QMessageBox::StandardButton button = QMessageBox::question(GUI, tr("Quiz not complete"),
-        msg + tr("Do you want to save the partial results?"), buttons);
+    const auto button = QMessageBox::question(GUI, tr("Quiz not complete"),
+                                              msg + tr("Do you want to save the partial results?"), buttons);
 
-    switch(button)
-    {
-        case QMessageBox::Yes: finish(true); break;
-        case QMessageBox::No: finish(false); break;
-        default: break;
-	}
-	QLOGDEC;
+    switch(button){
+    case QMessageBox::Yes: finish(true); break;
+    case QMessageBox::No: finish(false); break;
+    default: break;
+    }
 }
+
+} // namespace app
+} // namespace wynn

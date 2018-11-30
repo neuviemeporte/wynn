@@ -4,28 +4,35 @@
 #include <QAbstractTableModel>
 #include "database.h"
 
+namespace wynn {
+namespace db {
+
 /// Abstract class for other models to derive from.
-class DatabaseModel : public QAbstractTableModel
+class Model : public QAbstractTableModel
 {
 	Q_OBJECT
 
 protected:
+    enum Column { INDEX, ITEM, DESC, LEVEL, FAILS, UPDATED, CREATED };
 	Database *data_;
 	QStringList headers_;
-	DbEntry::QuizDirection curType_;
+    QuizDirection curType_;
 
 public:
-	DatabaseModel(QObject *parent = 0);
-	~DatabaseModel() {}
+    Model(QObject *parent = 0);
+    ~Model() {}
 
 	int rowCount(const QModelIndex &parent = QModelIndex()) const;
-	virtual int columnCount(const QModelIndex &parent = QModelIndex()) const { Q_UNUSED(parent); return (data_ ? 7 : 0); }
+    virtual int columnCount(const QModelIndex &parent = QModelIndex()) const {
+        Q_UNUSED(parent);
+        return (data_ ? 7 : 0);
+    }
 
 	virtual QVariant headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const;
 	virtual QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const;
 
 	void setDatabase(Database *data);
-	void setQuizType(const DbEntry::QuizDirection type);
+    void setQuizType(const QuizDirection type);
 
 private slots:
 	void beginInsert();
@@ -34,7 +41,10 @@ private slots:
 	void endRemove();
 
 protected:
-	const DbEntry& getItem(const QModelIndex &index) { return data_->entry(index.row()); }
+    const Entry& getItem(const QModelIndex &index) { return data_->entry(index.row()); }
 };
+
+} // namespace db
+} // namespace wynn
 
 #endif // DATABASE_MODEL_H_

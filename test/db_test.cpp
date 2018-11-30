@@ -1,11 +1,9 @@
+#include <QVector>
+
 #include "database.h"
 #include "gtest/gtest.h"
 #include "ixplog_active.h"
 #include "log.hpp"
-#include <QVector>
-
-// declared extern in wynndb, link error if not defined
-QTSLogger *APP_LOGSTREAM = nullptr;
 
 using namespace wynn::db;
 
@@ -177,4 +175,3 @@ TEST(DbaseTest, Sanity) {
     checkConsistency(xmlDb, entries);
     ASSERT_EQ(xmlDb.entryCount(), entries.size());
 }
-

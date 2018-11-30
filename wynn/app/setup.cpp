@@ -4,11 +4,16 @@
 #include "global.h"
 #include "database.h"
 
-#include <ixplog_active.h>
+#include "ixplog_active.h"
 
 #include <QDir>
 #include <QMessageBox>
 #include <QString>
+
+using namespace wynn::db;
+
+namespace wynn {
+namespace app {
 
 SetupThread::SetupThread(MainForm *parent) : QThread(parent), 
 	parent_(parent)
@@ -93,8 +98,8 @@ QList<Database*> SetupThread::loadDbases(const QString &dirPath, const bool exte
         dbase = new Database(NULL);
         Q_ASSERT(dbase != NULL);
 
-        DbError error = dbase->loadXML(dirPath + "/" + file);
-        if (error == DbError::ERROR_OK)
+        Error error = dbase->loadXML(dirPath + "/" + file);
+        if (error == Error::OK)
         {
             QLOG("Database in order, appending to list (entries: " << dbase->entryCount() << ")");
             dbase->setExternal(external);
@@ -103,7 +108,7 @@ QList<Database*> SetupThread::loadDbases(const QString &dirPath, const bool exte
         else
         {
             QLOG("Error reading this database!");
-            // todo: ujednolicic to i reloaduserdatabases, gdzies razem trzymac
+            // TODO: ujednolicic to i reloaduserdatabases, gdzies razem trzymac
             // nie mozna msgboxa bo to wolane z setupthreada a w innym threadzie nie mozna tworzyc widgetow
             // QMessageBox::warning(this, tr("Error!"), tr("Couldn't read user database\n") + error.msg);
             delete dbase;
@@ -116,3 +121,5 @@ QList<Database*> SetupThread::loadDbases(const QString &dirPath, const bool exte
     return ret;
 }
 
+} // namespace app
+} // namespace wynn

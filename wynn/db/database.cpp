@@ -42,8 +42,7 @@ Database::Database(QObject *parent, const QString &name) : QObject(parent),
     }
 }
 
-int Database::findEntry(const QString &text, int startIndex) const
-{
+int Database::findEntry(const QString &text, int startIndex) const {
     if (startIndex < 0 || startIndex >= entryCount()) {
         QLOGX("Start index " << startIndex << "ouf ot range!");
         return -1;
@@ -64,8 +63,7 @@ int Database::findEntry(const QString &text, int startIndex) const
     return -1;
 }
 
-int Database::findDuplicate(const Entry &entry, int exceptIdx) const
-{
+int Database::findDuplicate(const Entry &entry, int exceptIdx) const {
     for (int i = 0; i < entries_.count(); ++i) {
         if ( i == exceptIdx ) 
             continue; // skip over 'this' item
@@ -128,7 +126,7 @@ Error Database::remove(int idx) {
 Error Database::remove(const QList<int> &idxs)
 {
     QLOGX("Removing " << idxs.count() << " items");
-    // TODO: ensure index list is sorted, otherwise strange things will happen
+    // TODO: ensure index list is sorted, otherwise strange things will happen. Start with a test of course.
     for (int i = idxs.size() - 1; i >= 0; --i) {
         int idx = idxs.at(i);
         const Error e = remove(idx);
@@ -138,7 +136,6 @@ Error Database::remove(const QList<int> &idxs)
         }
     }
     
-    QLOGDEC;
     return Error::OK;
 }
 
@@ -206,8 +203,7 @@ Error Database::fail(const int idx, const QuizDirection type) {
     return Error::OK;
 }
 
-Error Database::reset()
-{
+Error Database::reset() {
     if (locked_) { 
         QLOGX("Database locked"); 
         return Error::LOCK;
@@ -222,8 +218,7 @@ Error Database::reset()
     return Error::OK;
 }
 
-void Database::saveXML(const QString &path) const
-{
+void Database::saveXML(const QString &path) const {
     QLOGX("Saving database '" << name_ << "' to '" << path << "'");
     
     QFile file(path);
@@ -237,7 +232,6 @@ void Database::saveXML(const QString &path) const
     
     xml.writeStartDocument();
     xml.writeStartElement(XML_HEADER);
-
     xml.writeAttribute(XML_NAME, name_);
     xml.writeAttribute(xml::XML_CREATED, created_.toString(xml::XML_DATEFORMAT));
     xml.writeAttribute(xml::XML_UPDATED, updated_.toString(xml::XML_DATEFORMAT));
@@ -251,11 +245,9 @@ void Database::saveXML(const QString &path) const
     xml.writeEndDocument();
     file.close();
     dirty_ = false;
-    QLOGDEC;
 }
 
-Error Database::loadXML(const QString &path)
-{
+Error Database::loadXML(const QString &path) {
     QFile file(path);
     QLOGX("Parsing file: " << file.fileName());
     if (!file.open(QIODevice::ReadOnly)) {
@@ -268,7 +260,6 @@ Error Database::loadXML(const QString &path)
     
     while (!xml.atEnd() && !xml.hasError())
     {
-        // read next entity and extract its name
         xml.readNext();
         
         if ( !xml.isStartElement() )
@@ -336,15 +327,12 @@ void Database::loadXMLExtraElements(QXmlStreamReader &xml, const QString &name)
     xml.raiseError(tr("Unrecognized element '") + name + "'");
 }
 
-bool Database::htmlExport(const QString &path, const QList<int> &idxs)
-{
+bool Database::htmlExport(const QString &path, const QList<int> &idxs) {
     QLOGX("Exporting database as html to '" << path);
-    QLOGINC;
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly))
     {
         QLOG("Unable to open file for writing! (Error: " << file.error() << ")");
-        QLOGDEC;
         return false;
     }
     
@@ -389,7 +377,6 @@ bool Database::htmlExport(const QString &path, const QList<int> &idxs)
     
     stream << "\t\t</tbody>\n\t</table>\n</body>\n</html>";
     file.close();
-    QLOGDEC;
     return true;
 }
 
