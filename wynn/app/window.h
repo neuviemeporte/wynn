@@ -1,7 +1,5 @@
-#pragma once
-
-#include "database.h"
-#include "dict_table.h"
+#ifndef WINDOW_H
+#define WINDOW_H
 
 #include "ui_mainform.h"
 #include "ui_dbase_entry.h"
@@ -12,9 +10,6 @@
 
 class Word;
 class HanCharacter;
-class Quiz;
-class Database;
-class SetupThread;
 class QProgressBar;
 
 class QLabel;
@@ -24,6 +19,22 @@ class QModelIndex;
 class QMouseEvent;
 class QFont;
 class QPluginLoader;
+
+class DictionaryModel;
+class DictionaryPlugin;
+
+namespace wynn {
+
+namespace db {
+class Database;
+class Model;
+enum QuizDirection;
+}
+
+namespace app {
+
+class Quiz;
+class SetupThread;
 
 class MainForm : public QMainWindow
 {
@@ -37,13 +48,14 @@ private:
     Ui::DbaseEntryDialog dbaseDialogUI_;
     Ui::QuizDialog quizDialogUI_;
 
+    // TODO: change to vector everywhere
     QList<DictionaryPlugin*> plugins_;
     QList<QPluginLoader*> pluginLoaders_;
     DictionaryPlugin *curPlugin_;
 
-    QList<Database*> databases_;
-    Database *curDbase_;
-    DatabaseModel *dbaseModel_;
+    QList<db::Database*> databases_;
+    db::Database *curDbase_;
+    db::Model *dbaseModel_;
     QSortFilterProxyModel dbaseProxyModel_;
     QString dbaseFindText_, firstDbase_, extDir_;
 
@@ -64,8 +76,8 @@ public:
 	DictionaryPlugin* plugin(const int index) { return plugins_.at(index); }
 	QPluginLoader* pluginLoader(const int index) { return pluginLoaders_.at(index); }
 
-    Database* database(const QString &name) const;
-    void addDatabase(Database *dbase);
+    db::Database* database(const QString &name) const;
+    void addDatabase(db::Database *dbase);
 
 signals:
 	void dictColumnResized(int curPlugIdx, int colIdx, int oldSize, int newSize);
@@ -137,13 +149,12 @@ protected:
     void addToDatabase(const QString &item, const QString &desc);
 
 	void setQuizControlsEnabled(bool arg);
-	DbEntry::QuizDirection curQuizType() const;
+    db::QuizDirection curQuizType() const;
 
 	void closeEvent(QCloseEvent *event);
 };
 
-class QuizDialogEventFilter : public QObject
-{
+class QuizDialogEventFilter : public QObject {
 	Q_OBJECT
 
 protected:
@@ -156,3 +167,8 @@ public:
 protected:
 	bool eventFilter(QObject *obj, QEvent *event);
 };
+
+} // namespace app
+} // namespace wynn
+
+#endif // WINDOW_H

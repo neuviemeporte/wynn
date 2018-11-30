@@ -31,12 +31,17 @@
 #include "dict_table.h"
 #include "dict_plugin.h"
 #include "database.h"
-#include "database_model.h"
+#include "model.h"
 #include "quiz.h"
 #include "ixplog_active.h"
 
 QWidget *GUI;
 QTSLogger *APP_LOGSTREAM = NULL;
+
+using namespace wynn::db;
+
+namespace wynn {
+namespace app {
 
 const QString 
     MainForm::VERSION     = "0.9.6",
@@ -589,12 +594,12 @@ void MainForm::slot_database_addToClicked()
 		}
 		QLOG("Adding entry to database '" << dbase->name() << ", text: '" << entry 
 			<< "', description: '" << desc << "'" );
-        DbError error = dbase->add(entry, desc);
-        if (error == DbError::ERROR_DUPLI)
+        Error error = dbase->add(entry, desc);
+        if (error == Error::DUPLI)
 		{ 
 			QMessageBox::StandardButton button;
             int dupidx = error.index();
-			const DbEntry &dupEntry = dbase->entry(dupidx);
+            const Entry &dupEntry = dbase->entry(dupidx);
 			button = QMessageBox::question(this, tr("Possible duplicate"), 
 				tr("A similar entry was found to already exist in the database:\n'") 
 				+ dupEntry.item() + "' / '" + dupEntry.description() + "' (" + QString::number(dupidx + 1) 
@@ -603,9 +608,9 @@ void MainForm::slot_database_addToClicked()
 			if (button == QMessageBox::Yes)
 			{
 				QLOG("User wants to add anyway");
-                error = dbase->add(entry, desc, true);
+                error = dbase->add(entry, desc, {}, true);
                 QLOG("Result: " << QString::number(error.type()));
-                Q_ASSERT(error == DbError::ERROR_OK);
+                Q_ASSERT(error == Error::OK);
 			}
 			else
 			{
@@ -720,7 +725,7 @@ void MainForm::slot_database_editClicked()
 
 	int idx = dbIdxs.first();
 	QLOG("Selected index: " << idx);
-    const DbEntry &e = curDbase_->entry(idx);
+    const Entry &e = curDbase_->entry(idx);
 
     dbaseDialogUI_.entryEdit->setText(e.item());
     dbaseDialogUI_.descEdit->setText(e.description());
@@ -739,12 +744,12 @@ void MainForm::slot_database_editClicked()
 		}
 
 		QLOG("User changes accepted");
-        DbError error = curDbase_->alter(idx, newitem, newdesc);
-        if (error == DbError::ERROR_DUPLI)
+        Error error = curDbase_->alter(idx, newitem, newdesc);
+        if (error == Error::DUPLI)
 		{
 			QMessageBox::StandardButton button;
             int dupidx = error.index();
-			const DbEntry &dupEntry = curDbase_->entry(dupidx);
+            const Entry &dupEntry = curDbase_->entry(dupidx);
 			button = QMessageBox::question(this, tr("Possible duplicate"), 
 				tr("A similar entry was found to already exist in the database:\n'")
 				+ dupEntry.item() + "' / '" + dupEntry.description() + "' (" + QString::number(dupidx + 1) 
@@ -754,9 +759,9 @@ void MainForm::slot_database_editClicked()
 			if (button == QMessageBox::Yes)
 			{
 				QLOG("User wants to replace anyway");
-                DbError error = curDbase_->alter(idx, newitem, newdesc, true);
+                Error error = curDbase_->alter(idx, newitem, newdesc, true);
                 QLOG("Result: " << QString::number(error.type()));
-                Q_ASSERT(error == DbError::ERROR_OK);
+                Q_ASSERT(error == Error::OK);
 			}
 			else
 			{
@@ -942,7 +947,7 @@ void MainForm::slot_database_quizTypeChanged()
 {
 	QLOGX("Radio button selection changed in quiz type button group");
 	QLOGINC;
-	DbEntry::QuizDirection type = curQuizType();
+    QuizDirection type = curQuizType();
 	Q_ASSERT(dbaseModel_ != NULL);
 	dbaseModel_->setQuizType(type);
 	QLOGDEC;
@@ -1061,7 +1066,7 @@ void MainForm::slot_setupDone()
 	if (curPlugin_)	curPlugin_->activate();
 
 	// create database table model
-	dbaseModel_ = new DatabaseModel();
+    dbaseModel_ = new Model();
 	dbaseModel_->setQuizType(curQuizType());
 	dbaseProxyModel_.setSourceModel(dbaseModel_);
 	dbaseProxyModel_.setSortRole(Qt::UserRole);
@@ -1546,7 +1551,7 @@ void MainForm::copyToAnotherDatabase(bool move)
     if (dbIdxs.size() == 1)
     {
         QLOG("Single item mode");
-        const DbEntry &entry = curDbase_->entry(dbIdxs.at(0));
+        const Entry &entry = curDbase_->entry(dbIdxs.at(0));
         dbaseDialogUI_.entryEdit->setText(entry.item());
         dbaseDialogUI_.descEdit->setText(entry.description());
     }
@@ -1582,7 +1587,7 @@ void MainForm::copyToAnotherDatabase(bool move)
     QList<int> okIdxs;
     for (int i = 0; i < dbIdxs.size(); ++i)
     {
-        const DbEntry &entry = curDbase_->entry(dbIdxs.at(i));
+        const Entry &entry = curDbase_->entry(dbIdxs.at(i));
         const QString
                 itemText = entry.item(),
                 descText = entry.description();
@@ -1590,25 +1595,25 @@ void MainForm::copyToAnotherDatabase(bool move)
         // if go-ahead given, ignore duplicates
         if (answer == QMessageBox::YesToAll)
         {
-            DbError error = target->add(itemText, descText, true);
-            Q_ASSERT(error == DbError::ERROR_OK);
+            Error error = target->add(itemText, descText, {}, true);
+            Q_ASSERT(error == Error::OK);
             if (move) okIdxs.append(dbIdxs.at(i));
         }
         // don't ignore duplicates (yet)
         else
         {
-            DbError error = target->add(itemText, descText, false);
+            Error error = target->add(itemText, descText, {}, false);
             // check error type,
-            if (error == DbError::ERROR_OK)
+            if (error == Error::OK)
             {
                 // in move mode, add index to successfully copied list for later removal from source
                 if (move) okIdxs.append(dbIdxs.at(i));
                 continue;
             }
             // if duplicate detected, warn
-            else if (error == DbError::ERROR_DUPLI && answer != QMessageBox::NoToAll)
+            else if (error == Error::DUPLI && answer != QMessageBox::NoToAll)
             {
-                const DbEntry &dupEntry = target->entry(error.index());
+                const Entry &dupEntry = target->entry(error.index());
                 answer = QMessageBox::information(this, tr("Duplicate entry"),
                                                   tr("Possible duplicate found for '") + entry.item() + "' (" + entry.description() +
                                                   tr(") in target database: '") + dupEntry.item() + "' (" + dupEntry.description() +
@@ -1618,8 +1623,8 @@ void MainForm::copyToAnotherDatabase(bool move)
             // retry item add with duplicates ignored on "yes" or "yes to all"
             if (answer == QMessageBox::Yes || answer == QMessageBox::YesToAll)
             {
-                error = target->add(itemText, descText, true);
-                if (error != DbError::ERROR_OK) {
+                error = target->add(itemText, descText, {}, true);
+                if (error != Error::OK) {
                     QLOG("Unable to add to database despite ignoring duplicates?! (" << error.msg() << ")");
                     return;
                 }
@@ -1684,11 +1689,11 @@ void MainForm::addToDatabase(const QString &item, const QString &desc)
 
     auto error = dbase->add(userItem, userDesc);
 
-    if (error == DbError::ERROR_DUPLI)
+    if (error == Error::DUPLI)
     {
         // todo: could be duplicate of multiple items, show all of them in the dialog
         int dupidx = error.index();
-        const DbEntry &dupEntry = dbase->entry(dupidx);
+        const Entry &dupEntry = dbase->entry(dupidx);
         const auto button = QMessageBox::question(this, tr("Possible duplicate"),
             tr("A similar entry was found to already exist in the database:\n'")
             + dupEntry.item() + "' / '" + dupEntry.description() + "' (" + QString::number(dupidx + 1)
@@ -1698,10 +1703,10 @@ void MainForm::addToDatabase(const QString &item, const QString &desc)
         if (button == QMessageBox::Yes)
         {
             QLOG("User wants to add anyway");
-            error = dbase->add(userItem, userDesc, true);
+            error = dbase->add(userItem, userDesc, {}, true);
             QLOG("Result: " << QString::number(error.type()));
             // todo handle nested error
-            if (error != DbError::ERROR_OK) {
+            if (error != Error::OK) {
                 QLOG("Unable to add to database even with duplicates ignored?! (" << error.msg() << ")");
                 return;
             }
@@ -1727,9 +1732,9 @@ void MainForm::setQuizControlsEnabled(bool arg)
 	ui_.quizButton->setEnabled(arg);
 }
 
-DbEntry::QuizDirection MainForm::curQuizType() const
+QuizDirection MainForm::curQuizType() const
 {
-	return (ui_.quizShowDescRadio->isChecked() ? DbEntry::DIR_SHOWDESC : DbEntry::DIR_SHOWITEM);
+    return (ui_.quizShowDescRadio->isChecked() ? DIR_SHOWDESC : DIR_SHOWITEM);
 }
 
 void MainForm::closeEvent(QCloseEvent *event)
@@ -1814,3 +1819,6 @@ bool QuizDialogEventFilter::eventFilter(QObject *obj, QEvent *event)
 	}
 	return QObject::eventFilter(obj, event);
 }
+
+} // namespace app
+} // namespace wynn

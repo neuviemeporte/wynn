@@ -389,6 +389,7 @@ QList<int> Kanjidic::findCharacters(const HanCharLanguage lang, const QString &r
 	}
 
 	QLOG("Removing " << removeIndices.count() << " characters from result due to narrowing" );
+    // TODO: use std::sort() here and elsewhere
 	qSort(removeIndices);
 	for (int i = removeIndices.size()-1; i >=0; --i)
 	{

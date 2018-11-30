@@ -11,8 +11,7 @@ DEPENDPATH += res ui
 INCLUDEPATH += $$DBDIR $$IXPLOG/include
 LIBS += -L$$DBDIR -lwynndb -lixplog
 
-HEADERS += database_model.h \
-           dict_plugin.h \
+HEADERS += dict_plugin.h \
            dict_table.h \
            global.h \
            quiz.h \
@@ -23,8 +22,7 @@ FORMS += ui/dbase_entry.ui \
          ui/mainform.ui \
          ui/quiz.ui
 
-SOURCES += database_model.cpp \
-           dict_table.cpp \
+SOURCES += dict_table.cpp \
            main.cpp \
            quiz.cpp \
            setup.cpp \

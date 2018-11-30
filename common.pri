@@ -13,6 +13,7 @@ LIBS += -L$$BUILD_DIR
 IXPLOG = $$TOPDIR/libixplog
 IXPDICT = $$TOPDIR/libixpdict
 IXPTEST = $$TOPDIR/libixptest
+WYNNDB = $$TOPDIR/wynn/db
 
 unix:isEmpty(PREFIX) {
 	PREFIX = /usr/local
