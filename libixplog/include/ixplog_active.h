@@ -11,12 +11,7 @@
 #include <vector>
 #include <sstream>
 
-
-//#define QLOG_DISABLE // switch all log directives into empty lines in the code
 //#define QLOG_INDENT_DEBUG // enable indent debugging mode, useful when indentation is broken
-
-#ifdef QLOG_DISABLE
-#endif
 
 class QSize;
 class QPoint;
@@ -168,15 +163,6 @@ private:
     }
 };
 
-///// Reuse implementation of operator<<(ostream, T) to implement operator<<(QTextStream, T).
-//template<typename T> std::string toString(const T &arg)
-//{
-//	std::ostringstream str;
-//	str << arg;
-//	return str.str();
-//}
-
-
 LIBQTLOG_EXPORT QTextStream& operator<<(QTextStream& os, const std::string &arg);
 LIBQTLOG_EXPORT QTextStream& operator<<(QTextStream &os, const QSize &arg);
 LIBQTLOG_EXPORT QTextStream& operator<<(QTextStream &os, const QPoint &arg);
@@ -187,4 +173,4 @@ LIBQTLOG_EXPORT QTextStream& operator<<(QTextStream &os, const QRectF &arg);
 LIBQTLOG_EXPORT QTextStream& operator<<(QTextStream &os, const QColor &arg);
 LIBQTLOG_EXPORT QTextStream& operator<<(QTextStream &os, const QDateTime &arg);
 
-#endif
+#endif // IXPLOG_ACTIVE_H

@@ -1,6 +1,6 @@
 #include "database.h"
-#include "common.h"
 #include "quiz.h"
+#include "common.h"
 #include "ixplog_active.h"
 
 #include <QString>
@@ -103,6 +103,7 @@ Error Database::add(const QString &item, const QString &desc, const QUuid &uuid,
     QLOG("Adding entry: " << addme);
     emit beginInsert();
     entries_.append(addme);
+    dirty_ = true;
     emit endInsert();
     emit countUpdate();
     return Error::OK; 
@@ -118,6 +119,7 @@ Error Database::remove(int idx) {
     // perform the remove
     emit beginRemove(idx);
     entries_.removeAt(idx);
+    dirty_ = true;
     emit endRemove();
     emit countUpdate();
     
@@ -161,7 +163,7 @@ Error Database::alter(int idx, const QString &item, const QString &desc, bool du
     // replace the original entry by the updated one
     QLOG("Applying alter");
     entries_.replace(idx, updated);
-    
+    dirty_ = true;
     return Error::OK;
 }
 
@@ -181,6 +183,7 @@ Error Database::point(const int idx, const QuizDirection type) {
     QLOG("Adding point for entry: " << e);
     e.addPoint(type);
     e.update(created_);
+    dirty_ = true;
     return Error::OK;
 }
 
@@ -201,6 +204,7 @@ Error Database::fail(const int idx, const QuizDirection type) {
     QLOG("Adding fail for entry: " << e);
     e.addFail(type);
     e.update(created_);
+    dirty_ = true;
     return Error::OK;
 }
 

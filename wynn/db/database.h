@@ -13,6 +13,8 @@
 namespace wynn {
 namespace db {
 
+enum QuizDirection;
+
 /// A database that keeps a list of DbEntry objects and manages them.
 /// TODO: updated_ not updated, how ironic.
 class Database : public QObject {

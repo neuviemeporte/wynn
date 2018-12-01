@@ -144,9 +144,9 @@ MainForm::MainForm(QWidget *parent) : QMainWindow(parent),
 	connect(ui_.dbaseFindButton,   SIGNAL(clicked()),                      this, SLOT(slot_database_findClicked()));
 	connect(ui_.dbaseExportButton, SIGNAL(clicked()),                      this, SLOT(slot_database_exportClicked()));
 	connect(ui_.dbaseResetButton,  SIGNAL(clicked()),                      this, SLOT(slot_database_resetClicked()));
-	connect(ui_.quizButton,        SIGNAL(clicked()),                      this, SLOT(slot_database_quizClicked()));
-	connect(ui_.quizShowDescRadio, SIGNAL(clicked()),                      this, SLOT(slot_database_quizTypeChanged()));
-	connect(ui_.quizShowItemRadio, SIGNAL(clicked()),                      this, SLOT(slot_database_quizTypeChanged()));
+    connect(ui_.quizButton,        SIGNAL(clicked()),                      this, SLOT(slot_quiz_clicked()));
+    connect(ui_.quizShowDescRadio, SIGNAL(clicked()),                      this, SLOT(slot_quiz_typeChanged()));
+    connect(ui_.quizShowItemRadio, SIGNAL(clicked()),                      this, SLOT(slot_quiz_typeChanged()));
     connect(ui_.databaseTable,     SIGNAL(activated(const QModelIndex &)), this, SLOT(slot_database_editClicked()));
 
 	// settings' signals
@@ -936,12 +936,12 @@ void MainForm::slot_quiz_clicked()
 		return;
 	}
     
-    // TODO: override dialog's close event to finish quiz silently
     setQuizControlsEnabled( false );
     quizDialog_->setWindowTitle(tr("Quiz") + " (" + curDbase_->name() + ")");
     // quiz dialog is not modal, lets user use dictionary while quiz in progress,
     // but database modifications are locked out
     curDbase_->setLocked( true );
+    displayQuizQuestion();
     quizDialog_->show();
 }
 
@@ -1023,7 +1023,7 @@ void MainForm::finishQuiz(const bool saveResults) {
         const int count = quiz_->questionCount();
         auto stats = quiz_->stats();
 
-        QMessageBox::information(GUI, tr("Done"), tr("Quiz completed.\n\nQuestions asked: ")
+        QMessageBox::information(GUI, tr("Done"), tr("Quiz completed.\n\nQuestions answered: ")
             + QString::number( stats.curQuestion ) + " of " + QString::number( count )
             + " (" + QString::number( stats.complete( count ),'f',2) + "%)\n"
             + tr("Correct answers: ")   + QString::number(stats.count(SUCCESS))
