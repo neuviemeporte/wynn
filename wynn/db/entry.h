@@ -13,11 +13,7 @@ class QXmlStreamWriter;
 namespace wynn {
 namespace db {
 
-enum QuizDirection { 
-    DIR_UNDEF = -1, 
-    DIR_SHOWDESC = 101, 
-    DIR_SHOWITEM = 202 
-};
+enum QuizDirection;
 
 class Entry {
 public:

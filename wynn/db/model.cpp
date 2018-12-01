@@ -1,5 +1,6 @@
 #include <QFont>
 #include "model.h"
+#include "quiz.h"
 #include "ixplog_active.h"
 
 extern class QTSLogger APP_LOG;

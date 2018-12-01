@@ -1,5 +1,6 @@
 #include "database.h"
 #include "common.h"
+#include "quiz.h"
 #include "ixplog_active.h"
 
 #include <QString>

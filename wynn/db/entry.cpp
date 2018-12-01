@@ -4,6 +4,7 @@
 
 #include "ixplog_active.h"
 #include "entry.h"
+#include "quiz.h"
 #include "common.h"
 
 extern class QTSLogger APP_LOG;
