@@ -14,10 +14,11 @@ INCLUDEPATH += $$IXPLOG/include $$IXPDICT/include $$WYNNDB
 LIBS += -lixpdict -lwynndb -lixplog 
 
 SOURCES += \
-    dict_test.cpp \
-    hanchar_test.cpp \
-    db_test.cpp \
-    main.cpp
+    test_dict.cpp \
+    test_hanchar.cpp \
+    test_db.cpp \
+    main.cpp \
+    test_quiz.cpp
 
 HEADERS += \
     log.hpp

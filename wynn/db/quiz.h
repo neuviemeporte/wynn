@@ -1,11 +1,13 @@
 #ifndef QUIZ_H
 #define QUIZ_H
 
-#include "database.h"
+#include "entry.h"
 #include <vector>
 
 namespace wynn {
 namespace db {
+
+class DatabaseInterface;
 
 enum QuizDirection { DIR_UNDEF = -1, DIR_SHOWDESC = 101, DIR_SHOWITEM = 202 };
 enum QuizTakeMode { TAKE_UNDEF = -1, TAKE_FAILS, TAKE_OLDIES, TAKE_RANDOM };
@@ -40,8 +42,6 @@ struct QuizStats {
 };
 
 class QuizQuestion {
-public:
-
 private:
     Entry entry_;
     int entryIdx_;
@@ -59,14 +59,14 @@ public:
 
 class Quiz {
 protected:
-    Database *dbase_;
+    DatabaseInterface *dbase_;
     QuizDirection type_;
     QuizStats stats_;
     std::vector<QuizQuestion> questions_;
 
 public:
-    Quiz(Database *database, const QuizSettings &settings);
-    Quiz(Database *database, const QuizDirection type, const QList<int> &idxs);
+    Quiz(DatabaseInterface *database, const QuizSettings &settings);
+    Quiz(DatabaseInterface *database, const QuizDirection type, const QList<int> &idxs);
 
     int questionCount() const { return static_cast<int>( questions_.size() ); }
     bool empty() const { return questions_.empty(); }

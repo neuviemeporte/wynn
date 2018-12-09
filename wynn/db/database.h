@@ -15,9 +15,31 @@ namespace db {
 
 enum QuizDirection;
 
+class DatabaseInterface {
+public:
+    virtual ~DatabaseInterface() {}
+    virtual const QString& name() const = 0;
+    virtual int entryCount() const = 0;
+    virtual const Entry& entry(int idx) const = 0;
+    virtual Error add(const QString &item, const QString &desc, const QUuid &uuid, const bool dupIgnore) = 0;
+    virtual Error remove(int idx) = 0;
+    virtual Error remove(const QList<int> &idxs) = 0;
+    virtual Error alter(int idx, const QString &item, const QString &desc, bool dupIgnore) = 0;
+    virtual Error point(const int idx, const QuizDirection type) = 0;
+    virtual Error fail(const int idx, const QuizDirection type) = 0;
+    virtual Error reset() = 0;
+    virtual void saveXML(const QString &path) const = 0;
+    virtual void saveXMLExtraAttributes(QXmlStreamWriter &) const = 0;
+    virtual void saveXMLExtraElements(QXmlStreamWriter &) const = 0;
+    virtual Error loadXML(const QString &path) = 0;
+    virtual void loadXMLExtraAttributes(QXmlStreamReader&) = 0;
+    virtual void loadXMLExtraElements(QXmlStreamReader &xml, const QString &name) = 0;
+    virtual Error loadXmlPostCheck() = 0;
+};
+
 /// A database that keeps a list of DbEntry objects and manages them.
 /// TODO: updated_ not updated, how ironic.
-class Database : public QObject {
+class Database : public QObject, public DatabaseInterface {
     Q_OBJECT
 public:
     static const QString XML_EXT, XML_HEADER, XML_NAME;
@@ -32,12 +54,12 @@ public:
     Database(QObject *parent);
     Database(QObject *parent, const QString &name);
     
-    const QString& name() const { return name_;	}
+    const QString& name() const override { return name_;	}
     const QDateTime& dateCreated() const { return created_;	}
     const QDateTime& dateUpdated() const { return updated_; }
     
-    int entryCount() const { return entries_.size(); }
-    const Entry& entry(int idx) const { 
+    int entryCount() const override { return entries_.size(); }
+    const Entry& entry(int idx) const override {
         Q_ASSERT(idx >= 0 && idx < entryCount()); 
         return entries_.at(idx); 
     }
@@ -50,22 +72,23 @@ public:
     int findEntry(const QString &text, int startIndex = 0) const;
     int findDuplicate(const Entry &entry, int exceptIdx = -1) const;
     
-    virtual Error add(const QString &item, const QString &desc, const QUuid &uuid = {}, const bool dupIgnore = false);
-    virtual Error remove(int idx);
-    virtual Error remove(const QList<int> &idxs);
-    virtual Error alter(int idx, const QString &item, const QString &desc, bool dupIgnore = false);
-    virtual Error point(const int idx, const QuizDirection type);
-    virtual Error fail(const int idx, const QuizDirection type);
-    virtual Error reset();
+    Error add(const QString &item, const QString &desc, const QUuid &uuid = {}, const bool dupIgnore = false) override;
+    Error remove(int idx) override;
+    Error remove(const QList<int> &idxs) override;
+    Error alter(int idx, const QString &item, const QString &desc, bool dupIgnore = false) override;
+    Error point(const int idx, const QuizDirection type) override;
+    Error fail(const int idx, const QuizDirection type) override;
+    Error reset() override;
     
-    virtual void saveXML(const QString &path) const;
-    virtual void saveXMLExtraAttributes(QXmlStreamWriter &) const {}
-    virtual void saveXMLExtraElements(QXmlStreamWriter &) const {}
+    void saveXML(const QString &path) const override;
+    void saveXMLExtraAttributes(QXmlStreamWriter &) const override {}
+    void saveXMLExtraElements(QXmlStreamWriter &) const override {}
     
-    virtual Error loadXML(const QString &path);
-    virtual void loadXMLExtraAttributes(QXmlStreamReader&) {}
-    virtual void loadXMLExtraElements(QXmlStreamReader &xml, const QString &name);
-    virtual Error loadXmlPostCheck() { return Error::OK; }
+    Error loadXML(const QString &path) override;
+    void loadXMLExtraAttributes(QXmlStreamReader&) override {}
+    void loadXMLExtraElements(QXmlStreamReader &xml, const QString &name) override;
+    Error loadXmlPostCheck() override { return Error::OK; }
+
     bool htmlExport(const QString &path, const QList<int> &idxs);
     
 signals:

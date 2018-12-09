@@ -16,7 +16,7 @@ namespace wynn {
 namespace db {
 
 // todo: undo button in quiz dialog
-Quiz::Quiz(Database *database, const QuizSettings &settings) :
+Quiz::Quiz(DatabaseInterface *database, const QuizSettings &settings) :
     dbase_(database),
     type_(settings.type)
 {
@@ -46,14 +46,13 @@ Quiz::Quiz(Database *database, const QuizSettings &settings) :
     randomizeOrder();
 }
 
-Quiz::Quiz(Database *database, const QuizDirection type, const QList<int> &idxs) :
+Quiz::Quiz(DatabaseInterface *database, const QuizDirection type, const QList<int> &idxs) :
     dbase_(database),
     type_(type)
 {
     QLOGX("Creating new quiz from database '" << dbase_->name() << "', items: " << dbase_->entryCount()
           << ", from provided list of " << idxs.size() << " indices, type: " << type_);
 
-    dbase_->setLocked(true);
     addByIndex(idxs);
     randomizeOrder();
 }

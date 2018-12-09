@@ -30,10 +30,14 @@ private:
     itemShownPoints_, itemShownFails_;
     
 public:
+    Entry(QUuid uuid, qint64 createStamp, qint64 updateStamp,
+          const QString &item, const QString desc,
+          int descShownPoints, int descShownFails,
+          int itemShownPoints, int itemShownFails);
     Entry();
     Entry(const QUuid &uuid, const QDateTime &dbCreated,
           const QString &item, const QString &desc);
-    Entry(QXmlStreamReader &xml);
+    explicit Entry(QXmlStreamReader &xml);
     
     bool equal(const Entry &other, const bool complete) const;
     bool operator==(const Entry &arg) const { return equal(arg, true); }
