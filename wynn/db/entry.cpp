@@ -4,6 +4,7 @@
 
 #include "ixplog_active.h"
 #include "entry.h"
+#include "quiz.h"
 #include "common.h"
 
 extern class QTSLogger APP_LOG;
@@ -28,24 +29,24 @@ const QString
     Entry::XML_ITEMPOINTS = "isPts",
     Entry::XML_ITEMFAILS  = "isFail";
 
-Entry::Entry() :
-    createStamp_(-1), updateStamp_(-1),
-    descShownPoints_(0), descShownFails_(0), 
-    itemShownPoints_(0), itemShownFails_(0)
+Entry::Entry(QUuid uuid, qint64 createStamp, qint64 updateStamp, const QString &item, const QString desc, int descShownPoints, int descShownFails, int itemShownPoints, int itemShownFails) :
+    uuid_(uuid), createStamp_(createStamp), updateStamp_(updateStamp),
+    item_(item), desc_(desc),
+    descShownPoints_(descShownPoints), descShownFails_(descShownFails),
+    itemShownPoints_(itemShownPoints), itemShownFails_(itemShownFails)
+{
+}
+
+Entry::Entry() : Entry({}, -1, -1, {}, {}, 0, 0, 0, 0)
 {
 }
 
 Entry::Entry(const QUuid &uuid, const QDateTime &dbCreated, const QString &item, const QString &desc) :
-    uuid_(uuid),
-    createStamp_(dbCreated.secsTo(QDateTime::currentDateTime())),
-    updateStamp_(-1),
-    item_(item), desc_(desc), 
-    descShownPoints_(0), descShownFails_(0), 
-    itemShownPoints_(0), itemShownFails_(0)
+    Entry(uuid, dbCreated.secsTo(QDateTime::currentDateTime()), -1, item, desc, 0, 0, 0, 0)
 {
 }
 
-Entry::Entry(QXmlStreamReader &xml)
+Entry::Entry(QXmlStreamReader &xml) : Entry()
 {
     Q_ASSERT(xml.isStartElement() && xml.name() == XML_HEADER);
     QLOGCX("Entry element start", DBXML_DEBUG);

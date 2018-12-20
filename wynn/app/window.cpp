@@ -30,13 +30,13 @@
 #include "setup.h"
 #include "dict_table.h"
 #include "dict_plugin.h"
-#include "database.h"
-#include "model.h"
-#include "quiz.h"
+#include "db/database.h"
+#include "db/model.h"
+#include "db/quiz.h"
 #include "ixplog_active.h"
 
 QWidget *GUI;
-QTSLogger *APP_LOGSTREAM = NULL;
+QTSLogger *APP_LOGSTREAM = nullptr;
 
 using namespace wynn::db;
 
@@ -68,14 +68,14 @@ const QString PLUG_EXT(".dll");
 // ==============================================================================================
 
 MainForm::MainForm(QWidget *parent) : QMainWindow(parent),
-    curPlugin_(NULL),
-    curDbase_(NULL), 
-    dbaseModel_(NULL), 
+    curPlugin_(nullptr),
+    curDbase_(nullptr), 
+    dbaseModel_(nullptr), 
     dbaseFindText_(""),
-    dictModel_(NULL),
-    dbaseDialog_(NULL), quizDialog_(NULL),
-    setupThread_(NULL), 
-    quiz_(NULL)
+    dictModel_(nullptr),
+    dbaseDialog_(nullptr), quizDialog_(nullptr),
+    setupThread_(nullptr), 
+    quiz_(nullptr)
 {
 	// open debug log
 	APP_LOGSTREAM = new QTSLogger("wynn_log.txt");
@@ -109,8 +109,12 @@ MainForm::MainForm(QWidget *parent) : QMainWindow(parent),
 	QLOG("Setting up quiz dialog");
 	quizDialog_ = new QDialog(this);
 	quizDialogUI_.setupUi(quizDialog_);
-	QuizDialogEventFilter *filter = new QuizDialogEventFilter(quizDialog_, &quizDialogUI_);
-	quizDialog_->installEventFilter(filter);
+    quizDialog_->installEventFilter(new QuizDialogEventFilter(quizDialog_, &quizDialogUI_));
+    connect(quizDialogUI_.correctButton,   SIGNAL(clicked()), this, SLOT(slot_quiz_correctClicked()));
+    connect(quizDialogUI_.incorrectButton, SIGNAL(clicked()), this, SLOT(slot_quiz_incorrectClicked()));
+    connect(quizDialogUI_.unsureButton,    SIGNAL(clicked()), this, SLOT(slot_quiz_unsureClicked()));
+    connect(quizDialogUI_.revealButton,    SIGNAL(clicked()), this, SLOT(slot_quiz_revealClicked()));
+    connect(quizDialogUI_.closeButton,     SIGNAL(clicked()), this, SLOT(slot_quiz_closeClicked()));
 
 	QLOG("Connecting signals");
 	// Main stack widget page changing buttons
@@ -140,9 +144,9 @@ MainForm::MainForm(QWidget *parent) : QMainWindow(parent),
 	connect(ui_.dbaseFindButton,   SIGNAL(clicked()),                      this, SLOT(slot_database_findClicked()));
 	connect(ui_.dbaseExportButton, SIGNAL(clicked()),                      this, SLOT(slot_database_exportClicked()));
 	connect(ui_.dbaseResetButton,  SIGNAL(clicked()),                      this, SLOT(slot_database_resetClicked()));
-	connect(ui_.quizButton,        SIGNAL(clicked()),                      this, SLOT(slot_database_quizClicked()));
-	connect(ui_.quizShowDescRadio, SIGNAL(clicked()),                      this, SLOT(slot_database_quizTypeChanged()));
-	connect(ui_.quizShowItemRadio, SIGNAL(clicked()),                      this, SLOT(slot_database_quizTypeChanged()));
+    connect(ui_.quizButton,        SIGNAL(clicked()),                      this, SLOT(slot_quiz_clicked()));
+    connect(ui_.quizShowDescRadio, SIGNAL(clicked()),                      this, SLOT(slot_quiz_typeChanged()));
+    connect(ui_.quizShowItemRadio, SIGNAL(clicked()),                      this, SLOT(slot_quiz_typeChanged()));
     connect(ui_.databaseTable,     SIGNAL(activated(const QModelIndex &)), this, SLOT(slot_database_editClicked()));
 
 	// settings' signals
@@ -204,9 +208,9 @@ MainForm::~MainForm()
 
 Database* MainForm::database(const QString &name) const
 {
-    if (name.isEmpty()) return NULL;
+    if (name.isEmpty()) return nullptr;
     QLOG("Getting database handle for name: '" << name << "'");
-    Database *ret = NULL, *dbase;
+    Database *ret = nullptr, *dbase;
     for (int i = 0; i < databases_.count(); ++i)
     {
         dbase = databases_.at(i);
@@ -471,7 +475,7 @@ void MainForm::slot_database_updateCount()
 
 	QLOG("Updating ranges of quiz spinboxes");
 	// database was altered, element count could have changed, update range spinboxes
-	Q_ASSERT(curDbase_ != NULL);
+	Q_ASSERT(curDbase_ != nullptr);
 	int itemsmax = curDbase_->entryCount();
 	int itemsmin = 0;
 	if (itemsmax > 0) itemsmin = 1;
@@ -516,7 +520,7 @@ void MainForm::slot_database_deleteClicked()
     QLOG("Database delete button clicked");
 	Database *dbase = curDbase_;
 	if (!dbase) {
-        QLOGX("Current database is null!");
+        QLOGX("Current database is nullptr!");
         return;
     }
 
@@ -660,7 +664,7 @@ void MainForm::slot_database_removeFromClicked()
 	// remove items
 	if (button == QMessageBox::Yes)
 	{
-		Q_ASSERT(curDbase_ != NULL);
+		Q_ASSERT(curDbase_ != nullptr);
         curDbase_->remove(dbIdxs);
 		ui_.databaseTable->setFocus(Qt::OtherFocusReason);
 		//	TODO:
@@ -831,7 +835,7 @@ void MainForm::slot_database_exportClicked()
 {
 	QLOG("Database export button clicked");
 	QLOGINC;
-	Q_ASSERT(curDbase_ != NULL);
+	Q_ASSERT(curDbase_ != nullptr);
 	QString fname = QFileDialog::getSaveFileName(this, tr("Export database"), QDir::homePath(), tr("HTML (*.htm *.html)"));
 	if (fname.isEmpty())
 	{
@@ -853,7 +857,7 @@ void MainForm::slot_database_resetClicked()
 {
 	QLOG("Database reset button clicked");
 	QLOGINC;
-	Q_ASSERT(curDbase_ != NULL);
+	Q_ASSERT(curDbase_ != nullptr);
 	QMessageBox::StandardButton button = QMessageBox::warning(this, tr("Database reset"), tr("All quiz points, failure counters and test dates will be reset for database '") + curDbase_->name() 
 		+ tr("'. Are you sure?"), QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
 	if (button == QMessageBox::No)
@@ -869,89 +873,177 @@ void MainForm::slot_database_resetClicked()
 	QLOGDEC;
 }
 
-void MainForm::slot_database_quizClicked()
+void MainForm::slot_quiz_clicked()
 {
-	if (!curDbase_)
-	{
+    if ( !curDbase_ ) {
 		QMessageBox::information(this, tr("No database"), 
 			tr("No user database exists. You must first create one and add items to it to run a quiz"));
 		return;
 	}
     
-    if (quiz_) {
+    if ( quiz_ ) {
         QLOGX("Previous quiz instance not cleaned up before trying to start new one!");
         return;
     }
     
-	if (curDbase_->locked()) { 
+    if ( curDbase_->locked() ) {
         popDbaseLocked(); 
         return; 
     }
 
-	QuizSettings settings;
-	settings.type = curQuizType();
-    QLOG("Database quiz button clicked, type = " << settings.type);
-
-	settings.range = ui_.quizRangeCheck->isChecked();
-	settings.rangeFrom = ui_.quizRangeFromSpin->value();
-	settings.rangeTo = ui_.quizRangeToSpin->value();
-	// range inside database index is taken care of automatically, can't select higher index in spinbox
-	if (settings.range && settings.rangeFrom >= settings.rangeTo) 
-	{
-		QMessageBox::information(this, tr("Bad range"), tr("\"From\" value for index must be less than \"To\" value."));
-		return;
-	}
-
-	settings.level = ui_.quizPointsCheck->isChecked();
-	settings.levelFrom = ui_.quizPointsFromSpin->value();
-	settings.levelTo = ui_.quizPointsToSpin->value();
-	if (settings.level && settings.levelFrom >= settings.levelTo) 
-	{
-		QMessageBox::information(this, tr("Bad range"), tr("\"From\" value for level must be less than \"To\" value."));
-		return;
-	}
-
-	settings.take = ui_.quizTakeCheck->isChecked();
-	settings.takeCount = ui_.quizTakeSpin->value();
-	if      (ui_.quizTakeFailRadio->isChecked())   settings.takeMode = TAKE_FAILS;
-	else if (ui_.quizTakeOldieRadio->isChecked())  settings.takeMode = TAKE_OLDIES;
-	else if (ui_.quizTakeRandomRadio->isChecked()) settings.takeMode = TAKE_RANDOM;
-
+    const auto quizType = curQuizType();
 	// retrieve selected indices from database table
-	QList<int> selidxs = getSelectedDbaseTableIdxs();
-	if (selidxs.count() > 1) 
-	{
+    QList<int> idxs = getSelectedDbaseTableIdxs();
+    if (idxs.count() > 1) {
 		QLOG("Adding quiz questions based on selection inside database table");
-		quiz_ =  new Quiz(curDbase_, settings, selidxs, quizDialog_, &quizDialogUI_);
+        quiz_ = new Quiz(curDbase_, quizType, idxs);
 	}
-	else
-	{
+    else {
 		QLOG("Adding quiz questions based on selected criteria");
-		quiz_ =  new Quiz(curDbase_, settings, quizDialog_, &quizDialogUI_);
+        QuizSettings settings;
+        settings.type = quizType;
+        QLOG("Database quiz button clicked, type = " << settings.type);
+
+        settings.range     = ui_.quizRangeCheck->isChecked();
+        settings.rangeFrom = ui_.quizRangeFromSpin->value();
+        settings.rangeTo   = ui_.quizRangeToSpin->value();
+        // range inside database index is taken care of automatically, can't select higher index in spinbox
+        if ( settings.range && settings.rangeFrom >= settings.rangeTo ) {
+            QMessageBox::information(this, tr("Bad range"), tr("\"From\" value for index must be less than \"To\" value."));
+            return;
+        }
+
+        settings.level     = ui_.quizPointsCheck->isChecked();
+        settings.levelFrom = ui_.quizPointsFromSpin->value();
+        settings.levelTo   = ui_.quizPointsToSpin->value();
+        if ( settings.level && settings.levelFrom >= settings.levelTo ) {
+            QMessageBox::information(this, tr("Bad range"), tr("\"From\" value for level must be less than \"To\" value."));
+            return;
+        }
+
+        settings.take      = ui_.quizTakeCheck->isChecked();
+        settings.takeCount = ui_.quizTakeSpin->value();
+        if      ( ui_.quizTakeFailRadio->isChecked()   ) settings.takeMode = TAKE_FAILS;
+        else if ( ui_.quizTakeOldieRadio->isChecked()  ) settings.takeMode = TAKE_OLDIES;
+        else if ( ui_.quizTakeRandomRadio->isChecked() ) settings.takeMode = TAKE_RANDOM;
+        quiz_ = new Quiz(curDbase_, settings);
 	}
     
-    if (quiz_->empty())
-	{
+    if ( quiz_->empty() ) {
 		QMessageBox::information(this, tr("No questions"), 
 			tr("The current combination of quiz settings yielded no questions to be asked. "
                "Change the settings or select some entries from the table by hand and try again."));
 		return;
 	}
     
-    setQuizControlsEnabled(false);
-    connect(quiz_, SIGNAL(done()), this, SLOT(slot_quizDone()));
-	quiz_->run();
+    setQuizControlsEnabled( false );
+    quizDialog_->setWindowTitle(tr("Quiz") + " (" + curDbase_->name() + ")");
+    // quiz dialog is not modal, lets user use dictionary while quiz in progress,
+    // but database modifications are locked out
+    curDbase_->setLocked( true );
+    displayQuizQuestion();
+    quizDialog_->show();
 }
 
-void MainForm::slot_database_quizTypeChanged()
+void MainForm::slot_quiz_typeChanged()
 {
 	QLOGX("Radio button selection changed in quiz type button group");
 	QLOGINC;
     QuizDirection type = curQuizType();
-	Q_ASSERT(dbaseModel_ != NULL);
+	Q_ASSERT(dbaseModel_ != nullptr);
 	dbaseModel_->setQuizType(type);
 	QLOGDEC;
 }
+
+void MainForm::slot_quiz_correctClicked() {
+    QLOGX("CORRECT answer in quiz");
+    Q_ASSERT(quiz_);
+    quiz_->answerCorrect();
+    displayQuizQuestion();
+}
+
+void MainForm::slot_quiz_incorrectClicked() {
+    QLOGX("INCORRECT answer in quiz");
+    Q_ASSERT(quiz_);
+    quiz_->answerIncorrect();
+    displayQuizQuestion();
+}
+
+void MainForm::slot_quiz_unsureClicked() {
+    QLOGX("UNSURE answer in quiz");
+    Q_ASSERT(quiz_);
+    quiz_->answerUnsure();
+    displayQuizQuestion();
+}
+
+void MainForm::slot_quiz_revealClicked() {
+    QLOGX("Reveal button clicked");
+    reveaQuizAnswer();
+}
+
+void MainForm::slot_quiz_closeClicked() {
+    QLOGX("Close button clicked");
+
+    const int qIdx = quiz_->questionIndex();
+    // nothing answered yet, no results so close without further questions
+    if ( qIdx == 0 ) {
+        finishQuiz(false);
+        return;
+    }
+
+    QMessageBox::StandardButtons buttons;
+    QString msg;
+    // dialog not yet closed, still visible and quiz can be resumed
+    if ( quizDialog_->isVisible() ) {
+        buttons = QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel;
+        msg = tr("Quiz will be interrupted. ");
+    }
+    // dialog already closed by [x] button with mouse
+    else {
+        buttons = QMessageBox::Yes | QMessageBox::No;
+        msg = tr("Quiz was interrupted. ");
+    }
+
+    const auto button = QMessageBox::question(
+                GUI, tr("Quiz not complete"),
+                msg + tr("Do you want to save the partial results?"), buttons
+    );
+
+    switch( button ) {
+    case QMessageBox::Yes: finishQuiz(true); break;
+    case QMessageBox::No: finishQuiz(false); break;
+    // don't finish quiz if cancel pressed
+    default: break;
+    }
+}
+
+void MainForm::finishQuiz(const bool saveResults) {
+    Q_ASSERT(curDbase_ && quiz_);
+    if ( saveResults ) {
+        const int count = quiz_->questionCount();
+        auto stats = quiz_->stats();
+
+        QMessageBox::information(GUI, tr("Done"), tr("Quiz completed.\n\nQuestions answered: ")
+            + QString::number( stats.curQuestion ) + " of " + QString::number( count )
+            + " (" + QString::number( stats.complete( count ),'f',2) + "%)\n"
+            + tr("Correct answers: ")   + QString::number(stats.count(SUCCESS))
+            + " ("+ QString::number(stats.percent(SUCCESS),'f',2) + "%)\n"
+            + tr("Incorrect answers: ") + QString::number(stats.count(FAIL))
+            + " (" + QString::number(stats.percent(FAIL),'f',2) + "%)\n"
+            + tr("Unsure answers: ")    + QString::number(stats.count(NOCHANGE))
+            + " (" + QString::number(stats.percent(NOCHANGE),'f',2) + "%)\n");
+
+        quiz_->saveResults();
+    }
+
+    QLOGX("Quiz done");
+    curDbase_->setLocked(false);
+    quizDialog_->hide();
+    delete quiz_;
+    quiz_ = nullptr;
+    setQuizControlsEnabled(true);
+}
+
 
 // ==============================================================================================
 // ============================== MainForm: public slots - settings
@@ -1048,7 +1140,7 @@ void MainForm::slot_setupDone()
 
 	// delete the background thread, clear the status bar from progress information, 
 	delete setupThread_;
-	setupThread_ = NULL;
+	setupThread_ = nullptr;
 
 	verifyPlugins();
 
@@ -1083,25 +1175,11 @@ void MainForm::slot_setupDone()
 	QLOGDEC;
 }
 
-void MainForm::slot_quizDone()
-{
-	QLOGX("Quiz done");
-	QLOGINC;
-
-	setQuizControlsEnabled(true);
-
-	delete quiz_;
-	quiz_ = NULL;
-	QLOGDEC;
-}
-
-void MainForm::slot_updateSetupMsg(const QString &msg)
-{
+void MainForm::slot_updateSetupMsg(const QString &msg) {
 	ui_.statusBar->showMessage(msg);
 }
 
-void MainForm::slot_testClicked()
-{
+void MainForm::slot_testClicked() {
 	ui_.databaseTable->resizeColumnsToContents();
 	ui_.databaseTable->resizeRowsToContents();
 
@@ -1543,7 +1621,7 @@ void MainForm::copyToAnotherDatabase(bool move)
 	QLOGRAW(endl);
 
     if (curDbase_ == nullptr) {
-        QLOG("Current database handle is null!");
+        QLOG("Current database handle is nullptr!");
         return;
     }
 
@@ -1572,7 +1650,7 @@ void MainForm::copyToAnotherDatabase(bool move)
     // find target database
     Database *target = database(dbaseDialogUI_.dbaseCombo->currentText());
     if (target == nullptr) {
-        QLOG("Target database handle is null!");
+        QLOG("Target database handle is nullptr!");
         return;
     }
 
@@ -1737,6 +1815,52 @@ QuizDirection MainForm::curQuizType() const
     return (ui_.quizShowDescRadio->isChecked() ? DIR_SHOWDESC : DIR_SHOWITEM);
 }
 
+void MainForm::displayQuizQuestion() {
+    Q_ASSERT(quiz_);
+    const int qIdx = quiz_->questionIndex(), qCnt = quiz_->questionCount();
+    auto qTxt = quiz_->questionText();
+    QLOGX("Showing next question, number: " << qIdx << " of " << qCnt << ": " << qTxt);
+
+    if ( qIdx >= qCnt ) {
+        QLOGX("Out of questions, quiz done");
+        finishQuiz(true);
+        return;
+    }
+
+    quizDialogUI_.progressLabel->setText( QString::number( qIdx + 1 ) + " / " + QString::number( qCnt ) );
+    quizDialogUI_.correctButton->setEnabled(false);
+    quizDialogUI_.incorrectButton->setEnabled(false);
+    quizDialogUI_.unsureButton->setEnabled(false);
+    quizDialogUI_.revealButton->setEnabled(true);
+    quizDialogUI_.questionLabel->setText(qTxt);
+    quizDialogUI_.answerLabel->clear();
+}
+
+void MainForm::reveaQuizAnswer() {
+    Q_ASSERT(quiz_);
+    const int qIdx = quiz_->questionIndex(), qCnt = quiz_->questionCount(), qLvl = quiz_->questionLevel(), qFail = quiz_->questionFails();
+    auto qAns = quiz_->answerText();
+    QLOGX("Revealing answer, question number: " << qIdx << " of " << qCnt << ": " << qAns);
+
+    if ( qIdx >= qCnt ) {
+        QLOGX("Question index out of range!");
+        finishQuiz(true);
+        return;
+    }
+
+    quizDialogUI_.correctButton->setEnabled(true);
+    quizDialogUI_.incorrectButton->setEnabled(true);
+    quizDialogUI_.unsureButton->setEnabled(true);
+    quizDialogUI_.revealButton->setEnabled(false);
+    quizDialogUI_.answerLabel->setText(qAns);
+    quizDialogUI_.progressLabel->setText(
+                quizDialogUI_.progressLabel->text() +
+                tr(" (Index: ") + QString::number(qIdx + 1) +
+                tr(", Level: ") + QString::number(qLvl) +
+                tr(", Failures: ") + QString::number(qFail) + ")"
+    );
+}
+
 void MainForm::closeEvent(QCloseEvent *event)
 {
 	QLOG("Main window close event intercepted");
@@ -1752,7 +1876,7 @@ void MainForm::closeEvent(QCloseEvent *event)
 	for (int i = 0; i < databases_.size(); ++i)
 	{
 		Database *dbase = databases_[i];
-		Q_ASSERT(dbase != NULL);
+		Q_ASSERT(dbase != nullptr);
 		// if a database has been altered, pop question dialog asking for save confirmation
 		if (dbase->dirty())
 		{
@@ -1798,22 +1922,20 @@ QuizDialogEventFilter::QuizDialogEventFilter(QDialog *parent, Ui::QuizDialog *di
 {
 }
 
-bool QuizDialogEventFilter::eventFilter(QObject *obj, QEvent *event)
-{
-	// keyboard shortcuts for dialog buttons and ignore dialog close with escape
-	if (event->type() == QEvent::KeyPress)
-	{
-		QKeyEvent *keyEvent = static_cast<QKeyEvent *>(event);
-		int key = keyEvent->key();
-		if (key == Qt::Key_A) { dialogUI_->correctButton->animateClick(); return true; }
-		else if (key == Qt::Key_S) { dialogUI_->incorrectButton->animateClick(); return true; }
-		else if (key == Qt::Key_D) { dialogUI_->unsureButton->animateClick(); return true; }
-		else if (key == Qt::Key_X) { dialogUI_->revealButton->animateClick(); return true; }
-		else if (key == Qt::Key_Escape) { return true; }
+bool QuizDialogEventFilter::eventFilter(QObject *obj, QEvent *event) {
+    // keyboard shortcuts for dialog buttons
+    if ( event->type() == QEvent::KeyPress ) {
+        switch ( static_cast<QKeyEvent*>(event)->key() ) {
+        case Qt::Key_A: dialogUI_->correctButton->animateClick(); return true;
+        case Qt::Key_S: dialogUI_->incorrectButton->animateClick(); return true;
+        case Qt::Key_D: dialogUI_->unsureButton->animateClick(); return true;
+        case Qt::Key_X: dialogUI_->revealButton->animateClick(); return true;
+        // ignore escape key, normally would close dialog
+        case Qt::Key_Escape: return true;
+        }
 	}
 	// finish quiz on dialog close, unfortunately this can't be ignored
-	else if (event->type() == QEvent::Close)
-	{
+    else if ( event->type() == QEvent::Close ) {
 		dialogUI_->closeButton->animateClick();
 		return true;
 	}

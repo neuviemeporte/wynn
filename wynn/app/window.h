@@ -4,6 +4,7 @@
 #include "ui_mainform.h"
 #include "ui_dbase_entry.h"
 #include "ui_quiz.h"
+#include "db/common.h"
 
 #include <QMainWindow>
 #include <QSortFilterProxyModel>
@@ -28,12 +29,10 @@ namespace wynn {
 namespace db {
 class Database;
 class Model;
-enum QuizDirection;
+class Quiz;
 }
 
 namespace app {
-
-class Quiz;
 class SetupThread;
 
 class MainForm : public QMainWindow
@@ -64,10 +63,10 @@ private:
     bool preventDuplicates_;
 
     SetupThread *setupThread_;
-    Quiz *quiz_;
+    db::Quiz *quiz_;
 
 public:
-	MainForm(QWidget *parent = 0);
+	MainForm(QWidget *parent = nullptr);
 	~MainForm();
 
 	Ui::MainFormClass& ui() { return ui_; }
@@ -113,8 +112,15 @@ public slots:
 	void slot_database_findClicked();
 	void slot_database_exportClicked();
 	void slot_database_resetClicked();
-	void slot_database_quizClicked();
-	void slot_database_quizTypeChanged();
+
+    // database quiz funcionality
+    void slot_quiz_clicked();
+    void slot_quiz_typeChanged();
+    void slot_quiz_correctClicked();
+    void slot_quiz_incorrectClicked();
+    void slot_quiz_unsureClicked();
+    void slot_quiz_revealClicked();
+    void slot_quiz_closeClicked();
 
 	// settings
 	void slot_settings_altdirCheckClicked(bool arg);
@@ -124,7 +130,6 @@ public slots:
 
 	// other
 	void slot_setupDone();
-	void slot_quizDone();
 	void slot_updateSetupMsg(const QString &msg);
 	void slot_testClicked();
 
@@ -150,6 +155,9 @@ protected:
 
 	void setQuizControlsEnabled(bool arg);
     db::QuizDirection curQuizType() const;
+    void displayQuizQuestion();
+    void reveaQuizAnswer();
+    void finishQuiz(const bool saveResults);
 
 	void closeEvent(QCloseEvent *event);
 };

@@ -1,6 +1,6 @@
 #include <QVector>
-
 #include "database.h"
+#include "quiz.h"
 #include "gtest/gtest.h"
 #include "ixplog_active.h"
 #include "log.hpp"

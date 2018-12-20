@@ -8,13 +8,12 @@ include($$TOPDIR/common.pri)
 
 DBDIR = ../db
 DEPENDPATH += res ui
-INCLUDEPATH += $$DBDIR $$IXPLOG/include
+INCLUDEPATH += .. $$IXPLOG/include
 LIBS += -L$$DBDIR -lwynndb -lixplog
 
 HEADERS += dict_plugin.h \
            dict_table.h \
            global.h \
-           quiz.h \
            setup.h \
 	   window.h
 
@@ -24,7 +23,6 @@ FORMS += ui/dbase_entry.ui \
 
 SOURCES += dict_table.cpp \
            main.cpp \
-           quiz.cpp \
            setup.cpp \
 	   window.cpp
 

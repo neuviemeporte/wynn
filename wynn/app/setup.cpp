@@ -2,7 +2,7 @@
 #include "window.h"
 #include "dict_plugin.h"
 #include "global.h"
-#include "database.h"
+#include "db/database.h"
 
 #include "ixplog_active.h"
 
