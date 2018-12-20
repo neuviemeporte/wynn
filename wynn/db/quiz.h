@@ -1,6 +1,7 @@
 #ifndef QUIZ_H
 #define QUIZ_H
 
+#include "common.h"
 #include "entry.h"
 #include <vector>
 
@@ -8,10 +9,6 @@ namespace wynn {
 namespace db {
 
 class DatabaseInterface;
-
-enum QuizDirection { DIR_UNDEF = -1, DIR_SHOWDESC = 101, DIR_SHOWITEM = 202 };
-enum QuizTakeMode { TAKE_UNDEF = -1, TAKE_FAILS, TAKE_OLDIES, TAKE_RANDOM };
-enum QuizResult { NOCHANGE, SUCCESS, FAIL };
 
 struct QuizSettings {
     QuizDirection type;

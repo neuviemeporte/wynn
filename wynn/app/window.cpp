@@ -30,13 +30,13 @@
 #include "setup.h"
 #include "dict_table.h"
 #include "dict_plugin.h"
-#include "database.h"
-#include "model.h"
-#include "quiz.h"
+#include "db/database.h"
+#include "db/model.h"
+#include "db/quiz.h"
 #include "ixplog_active.h"
 
 QWidget *GUI;
-QTSLogger *APP_LOGSTREAM = NULL;
+QTSLogger *APP_LOGSTREAM = nullptr;
 
 using namespace wynn::db;
 
@@ -68,14 +68,14 @@ const QString PLUG_EXT(".dll");
 // ==============================================================================================
 
 MainForm::MainForm(QWidget *parent) : QMainWindow(parent),
-    curPlugin_(NULL),
-    curDbase_(NULL), 
-    dbaseModel_(NULL), 
+    curPlugin_(nullptr),
+    curDbase_(nullptr), 
+    dbaseModel_(nullptr), 
     dbaseFindText_(""),
-    dictModel_(NULL),
-    dbaseDialog_(NULL), quizDialog_(NULL),
-    setupThread_(NULL), 
-    quiz_(NULL)
+    dictModel_(nullptr),
+    dbaseDialog_(nullptr), quizDialog_(nullptr),
+    setupThread_(nullptr), 
+    quiz_(nullptr)
 {
 	// open debug log
 	APP_LOGSTREAM = new QTSLogger("wynn_log.txt");
@@ -208,9 +208,9 @@ MainForm::~MainForm()
 
 Database* MainForm::database(const QString &name) const
 {
-    if (name.isEmpty()) return NULL;
+    if (name.isEmpty()) return nullptr;
     QLOG("Getting database handle for name: '" << name << "'");
-    Database *ret = NULL, *dbase;
+    Database *ret = nullptr, *dbase;
     for (int i = 0; i < databases_.count(); ++i)
     {
         dbase = databases_.at(i);
@@ -475,7 +475,7 @@ void MainForm::slot_database_updateCount()
 
 	QLOG("Updating ranges of quiz spinboxes");
 	// database was altered, element count could have changed, update range spinboxes
-	Q_ASSERT(curDbase_ != NULL);
+	Q_ASSERT(curDbase_ != nullptr);
 	int itemsmax = curDbase_->entryCount();
 	int itemsmin = 0;
 	if (itemsmax > 0) itemsmin = 1;
@@ -520,7 +520,7 @@ void MainForm::slot_database_deleteClicked()
     QLOG("Database delete button clicked");
 	Database *dbase = curDbase_;
 	if (!dbase) {
-        QLOGX("Current database is null!");
+        QLOGX("Current database is nullptr!");
         return;
     }
 
@@ -664,7 +664,7 @@ void MainForm::slot_database_removeFromClicked()
 	// remove items
 	if (button == QMessageBox::Yes)
 	{
-		Q_ASSERT(curDbase_ != NULL);
+		Q_ASSERT(curDbase_ != nullptr);
         curDbase_->remove(dbIdxs);
 		ui_.databaseTable->setFocus(Qt::OtherFocusReason);
 		//	TODO:
@@ -835,7 +835,7 @@ void MainForm::slot_database_exportClicked()
 {
 	QLOG("Database export button clicked");
 	QLOGINC;
-	Q_ASSERT(curDbase_ != NULL);
+	Q_ASSERT(curDbase_ != nullptr);
 	QString fname = QFileDialog::getSaveFileName(this, tr("Export database"), QDir::homePath(), tr("HTML (*.htm *.html)"));
 	if (fname.isEmpty())
 	{
@@ -857,7 +857,7 @@ void MainForm::slot_database_resetClicked()
 {
 	QLOG("Database reset button clicked");
 	QLOGINC;
-	Q_ASSERT(curDbase_ != NULL);
+	Q_ASSERT(curDbase_ != nullptr);
 	QMessageBox::StandardButton button = QMessageBox::warning(this, tr("Database reset"), tr("All quiz points, failure counters and test dates will be reset for database '") + curDbase_->name() 
 		+ tr("'. Are you sure?"), QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
 	if (button == QMessageBox::No)
@@ -950,7 +950,7 @@ void MainForm::slot_quiz_typeChanged()
 	QLOGX("Radio button selection changed in quiz type button group");
 	QLOGINC;
     QuizDirection type = curQuizType();
-	Q_ASSERT(dbaseModel_ != NULL);
+	Q_ASSERT(dbaseModel_ != nullptr);
 	dbaseModel_->setQuizType(type);
 	QLOGDEC;
 }
@@ -1140,7 +1140,7 @@ void MainForm::slot_setupDone()
 
 	// delete the background thread, clear the status bar from progress information, 
 	delete setupThread_;
-	setupThread_ = NULL;
+	setupThread_ = nullptr;
 
 	verifyPlugins();
 
@@ -1621,7 +1621,7 @@ void MainForm::copyToAnotherDatabase(bool move)
 	QLOGRAW(endl);
 
     if (curDbase_ == nullptr) {
-        QLOG("Current database handle is null!");
+        QLOG("Current database handle is nullptr!");
         return;
     }
 
@@ -1650,7 +1650,7 @@ void MainForm::copyToAnotherDatabase(bool move)
     // find target database
     Database *target = database(dbaseDialogUI_.dbaseCombo->currentText());
     if (target == nullptr) {
-        QLOG("Target database handle is null!");
+        QLOG("Target database handle is nullptr!");
         return;
     }
 
@@ -1876,7 +1876,7 @@ void MainForm::closeEvent(QCloseEvent *event)
 	for (int i = 0; i < databases_.size(); ++i)
 	{
 		Database *dbase = databases_[i];
-		Q_ASSERT(dbase != NULL);
+		Q_ASSERT(dbase != nullptr);
 		// if a database has been altered, pop question dialog asking for save confirmation
 		if (dbase->dirty())
 		{

@@ -5,6 +5,8 @@
 #include <QString>
 #include <QUuid>
 
+#include "common.h"
+
 class QTextStream;
 class QDateTime;
 class QXmlStreamReader;
@@ -12,8 +14,6 @@ class QXmlStreamWriter;
 
 namespace wynn {
 namespace db {
-
-enum QuizDirection;
 
 class Entry {
 public:

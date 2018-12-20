@@ -4,6 +4,7 @@
 #include "ui_mainform.h"
 #include "ui_dbase_entry.h"
 #include "ui_quiz.h"
+#include "db/common.h"
 
 #include <QMainWindow>
 #include <QSortFilterProxyModel>
@@ -29,7 +30,6 @@ namespace db {
 class Database;
 class Model;
 class Quiz;
-enum QuizDirection;
 }
 
 namespace app {
@@ -66,7 +66,7 @@ private:
     db::Quiz *quiz_;
 
 public:
-	MainForm(QWidget *parent = 0);
+	MainForm(QWidget *parent = nullptr);
 	~MainForm();
 
 	Ui::MainFormClass& ui() { return ui_; }

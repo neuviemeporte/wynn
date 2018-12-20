@@ -52,17 +52,17 @@ public:
     DatabaseMock dbMock_;
 
     void SetUp() override {
-        EXPECT_CALL(dbMock_, name).WillOnce(ReturnRef(DB_NAME));
-        EXPECT_CALL(dbMock_, entryCount).WillRepeatedly(Return(static_cast<int>(DB_ENTRIES.size())));
-        EXPECT_CALL(dbMock_, entry(_)).WillRepeatedly(Invoke([](int i){
-            return DB_ENTRIES.at(i);
+        EXPECT_CALL(dbMock_, name()).WillOnce(ReturnRef(DB_NAME));
+        EXPECT_CALL(dbMock_, entryCount()).WillRepeatedly(Return(static_cast<int>(DB_ENTRIES.size())));
+        EXPECT_CALL(dbMock_, entry(_)).WillRepeatedly(Invoke([](int i) -> const Entry& {
+            return DB_ENTRIES.at(static_cast<size_t>(i));
         }));
     }
 };
 
 TEST_F(QuizTest, Sanity) {
-    const QuizDirection qdir = DIR_SHOWDESC;
-    QuizSettings qset;
-    Quiz quiz(&dbMock_, qset);
+//    const QuizDirection qdir = DIR_SHOWDESC;
+//    QuizSettings qset;
+//    Quiz quiz(&dbMock_, qset);
 
 }
