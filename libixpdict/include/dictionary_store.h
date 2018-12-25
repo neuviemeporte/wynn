@@ -39,7 +39,7 @@ template <typename T> void Dictionary<T>::loadData(const QString &path)
 	}
 	QDataStream in(&f);
 	in >> entries_;
-	if (in.status() != QDataStream::Ok) 
+	if (in.status() != QDataStream::Ok || entries_.empty()) 
 	{
 		//QLOGX("Error reading dictionary file, status: " << in.status());
 		error_ = true;
