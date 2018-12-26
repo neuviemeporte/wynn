@@ -36,11 +36,6 @@ Database::Database(QObject *parent, const QString &name) : QObject(parent),
     dirty_(true), error_(false), locked_(false), external_(false)
 {
     QLOGX("Creating new, name: '" << name_);
-    
-    // TODO: check if this not being connected from the other constructor is a problem
-    if (parent) {
-        connect(this, SIGNAL(countUpdate()), parent, SLOT(slot_database_updateCount()));
-    }
 }
 
 int Database::findEntry(const QString &text, int startIndex) const {
@@ -223,6 +218,7 @@ Error Database::reset() {
     return Error::OK;
 }
 
+// TODO: return error on failure, warn user
 void Database::saveXML(const QString &path) const {
     QLOGX("Saving database '" << name_ << "' to '" << path << "'");
     

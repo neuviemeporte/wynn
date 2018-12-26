@@ -9,7 +9,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>915</width>
+    <width>940</width>
     <height>694</height>
    </rect>
   </property>
@@ -112,15 +112,43 @@
        </item>
        <item>
         <widget class="QPushButton" name="createButton">
+         <property name="toolTip">
+          <string>Create new database</string>
+         </property>
          <property name="text">
           <string>Create</string>
+         </property>
+         <property name="icon">
+          <iconset theme="document-new">
+           <normaloff>.</normaloff>.</iconset>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="saveButton">
+         <property name="toolTip">
+          <string>Save currently selected database to disk</string>
+         </property>
+         <property name="text">
+          <string>Save</string>
+         </property>
+         <property name="icon">
+          <iconset theme="document-save">
+           <normaloff>.</normaloff>.</iconset>
          </property>
         </widget>
        </item>
        <item>
         <widget class="QPushButton" name="deleteButton">
+         <property name="toolTip">
+          <string>Delete currently selected database</string>
+         </property>
          <property name="text">
           <string>Delete</string>
+         </property>
+         <property name="icon">
+          <iconset theme="edit-delete">
+           <normaloff>.</normaloff>.</iconset>
          </property>
         </widget>
        </item>
@@ -166,7 +194,7 @@
           <bool>false</bool>
          </property>
          <property name="currentIndex">
-          <number>3</number>
+          <number>1</number>
          </property>
          <widget class="QWidget" name="pageDictionary">
           <layout class="QVBoxLayout" name="verticalLayout_2">
@@ -640,17 +668,11 @@
                 </item>
                 <item>
                  <widget class="QPushButton" name="quizButton">
-                  <property name="minimumSize">
-                   <size>
-                    <width>51</width>
-                    <height>77</height>
-                   </size>
-                  </property>
-                  <property name="maximumSize">
-                   <size>
-                    <width>51</width>
-                    <height>70</height>
-                   </size>
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Minimum" vsizetype="Minimum">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
                   </property>
                   <property name="text">
                    <string>Start
@@ -708,7 +730,7 @@ quiz</string>
             </widget>
            </item>
            <item>
-            <layout class="QHBoxLayout" name="horizontalLayout_13">
+            <layout class="QHBoxLayout" name="dbButtonsLayout">
              <item>
               <spacer name="horizontalSpacer_7">
                <property name="orientation">
@@ -1009,8 +1031,8 @@ unavailable, the default directory will be reverted to.</string>
                  <string>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
 &lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
 p, li { white-space: pre-wrap; }
-&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'MS Shell Dlg 2'; font-size:8pt; font-weight:400; font-style:normal;&quot;&gt;
-&lt;p style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:20pt; font-weight:600; color:#ff0000;&quot;&gt;Wynn v%VER%&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'Ubuntu'; font-size:11pt; font-weight:400; font-style:normal;&quot;&gt;
+&lt;p style=&quot; margin-top:18px; margin-bottom:12px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-family:'MS Shell Dlg 2'; font-size:20pt; font-weight:600; color:#ff0000;&quot;&gt;Wynn v%1&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                 </property>
                </widget>
               </item>
@@ -1107,12 +1129,12 @@ p, li { white-space: pre-wrap; }
    <slot>setEnabled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>249</x>
-     <y>126</y>
+     <x>110</x>
+     <y>93</y>
     </hint>
     <hint type="destinationlabel">
-     <x>302</x>
-     <y>131</y>
+     <x>110</x>
+     <y>93</y>
     </hint>
    </hints>
   </connection>
@@ -1123,12 +1145,12 @@ p, li { white-space: pre-wrap; }
    <slot>setEnabled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>249</x>
-     <y>126</y>
+     <x>110</x>
+     <y>93</y>
     </hint>
     <hint type="destinationlabel">
-     <x>302</x>
-     <y>159</y>
+     <x>110</x>
+     <y>93</y>
     </hint>
    </hints>
   </connection>
@@ -1139,12 +1161,12 @@ p, li { white-space: pre-wrap; }
    <slot>setEnabled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>507</x>
-     <y>128</y>
+     <x>110</x>
+     <y>93</y>
     </hint>
     <hint type="destinationlabel">
-     <x>568</x>
-     <y>130</y>
+     <x>65</x>
+     <y>83</y>
     </hint>
    </hints>
   </connection>
@@ -1155,12 +1177,12 @@ p, li { white-space: pre-wrap; }
    <slot>setEnabled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>507</x>
-     <y>128</y>
+     <x>110</x>
+     <y>93</y>
     </hint>
     <hint type="destinationlabel">
-     <x>517</x>
-     <y>155</y>
+     <x>110</x>
+     <y>93</y>
     </hint>
    </hints>
   </connection>
@@ -1171,12 +1193,12 @@ p, li { white-space: pre-wrap; }
    <slot>setEnabled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>507</x>
-     <y>128</y>
+     <x>110</x>
+     <y>93</y>
     </hint>
     <hint type="destinationlabel">
-     <x>575</x>
-     <y>155</y>
+     <x>110</x>
+     <y>93</y>
     </hint>
    </hints>
   </connection>
@@ -1187,12 +1209,12 @@ p, li { white-space: pre-wrap; }
    <slot>setEnabled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>385</x>
-     <y>124</y>
+     <x>110</x>
+     <y>93</y>
     </hint>
     <hint type="destinationlabel">
-     <x>432</x>
-     <y>125</y>
+     <x>110</x>
+     <y>93</y>
     </hint>
    </hints>
   </connection>
@@ -1203,12 +1225,12 @@ p, li { white-space: pre-wrap; }
    <slot>setEnabled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>367</x>
-     <y>120</y>
+     <x>110</x>
+     <y>93</y>
     </hint>
     <hint type="destinationlabel">
-     <x>437</x>
-     <y>159</y>
+     <x>110</x>
+     <y>93</y>
     </hint>
    </hints>
   </connection>
@@ -1219,12 +1241,12 @@ p, li { white-space: pre-wrap; }
    <slot>setEnabled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>507</x>
-     <y>128</y>
+     <x>110</x>
+     <y>93</y>
     </hint>
     <hint type="destinationlabel">
-     <x>635</x>
-     <y>128</y>
+     <x>110</x>
+     <y>93</y>
     </hint>
    </hints>
   </connection>
@@ -1235,12 +1257,12 @@ p, li { white-space: pre-wrap; }
    <slot>setEnabled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>121</x>
-     <y>111</y>
+     <x>110</x>
+     <y>93</y>
     </hint>
     <hint type="destinationlabel">
-     <x>445</x>
-     <y>112</y>
+     <x>210</x>
+     <y>93</y>
     </hint>
    </hints>
   </connection>
@@ -1251,12 +1273,12 @@ p, li { white-space: pre-wrap; }
    <slot>setEnabled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>115</x>
-     <y>111</y>
+     <x>110</x>
+     <y>93</y>
     </hint>
     <hint type="destinationlabel">
-     <x>884</x>
-     <y>114</y>
+     <x>110</x>
+     <y>93</y>
     </hint>
    </hints>
   </connection>

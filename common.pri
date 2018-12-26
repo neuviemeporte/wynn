@@ -1,6 +1,7 @@
 debug {
     message($$TARGET debug build)
     BUILD_DIR = $$TOPDIR/build-debug
+    DEFINES += DEBUG
 }
 else {
     message($$TARGET release build)

@@ -283,7 +283,7 @@ void DePlugin::doSearch()
 	}
 	QLOG("Extended query: '" << queryEx << "'");
 
-	int itemcount, pass = 4; // maximum number of tries in persistent mode
+	int itemcount = 0, pass = 4; // maximum number of tries in persistent mode
 	bool complete = false, persistent = panelUI_.persistentCheck->isChecked();
 
 	// generate search results, search up to 4 times in persistent mode until results are 
