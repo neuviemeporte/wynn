@@ -101,8 +101,8 @@ public slots:
 
 	// database functionality
 	void slot_database_changeCurrent(const QString& text);
-	void slot_database_updateCount();
 	void slot_database_createClicked();
+    void slot_database_saveClicked();
 	void slot_database_deleteClicked();
 	void slot_database_addToClicked();
 	void slot_database_removeFromClicked();
@@ -142,14 +142,19 @@ protected:
 	void loadSettings();
 	void saveSettings();
 	void applySettings();
+    void statusMessage(const QString &text, const int timeoutMs = 0);
+    
+    void dbaseCountUpdate();
+    QString dbaseSavePath(const db::Database *db) const;
 
 	void reloadExternalDbases(const QString &newdir);
-	void updateDbaseCombo(bool restore);
+	void reloadDbaseCombo(const bool restoreSelection);
 	int findComboIndex(const QComboBox *combo, const QString &text);
 
     void setupDbaseDialogCombo(bool includeCurrent, bool selCurrent);
 	QList<int> getSelectedDbaseTableIdxs();
-	void copyToAnotherDatabase(bool move);
+	void copyToAnotherDatabase(const bool move);
+    void popDbaseMissing();
 	void popDbaseLocked();
     void addToDatabase(const QString &item, const QString &desc);
 

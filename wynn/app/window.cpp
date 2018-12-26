@@ -51,16 +51,18 @@ const QString
 	MainForm::SETT_CURDB  = "curdb";
 
 namespace {
-const QString PLUG_WILDCARD("wynnplugin-*");
+const QString PLUG_WILDCARD = "wynnplugin-*";
 #if defined(__linux__)
-const QString PLUG_PREFIX("lib");
-const QString PLUG_EXT(".so");
+const QString PLUG_PREFIX = "lib";
+const QString PLUG_EXT = ".so";
 #elif defined(_WIN32)
-const QString PLUG_PREFIX("");
-const QString PLUG_EXT(".dll");
+const QString PLUG_PREFIX = "";
+const QString PLUG_EXT = ".dll";
 #else
 #error Unrecognized target platform!
 #endif
+// for showing transient messages in the status bar
+const int MSG_TIMEOUT = 2000;
 } // namespace
 
 // ==============================================================================================
@@ -73,7 +75,8 @@ MainForm::MainForm(QWidget *parent) : QMainWindow(parent),
     dbaseModel_(nullptr), 
     dbaseFindText_(""),
     dictModel_(nullptr),
-    dbaseDialog_(nullptr), quizDialog_(nullptr),
+    dbaseDialog_(nullptr), 
+    quizDialog_(nullptr),
     setupThread_(nullptr), 
     quiz_(nullptr)
 {
@@ -84,15 +87,24 @@ MainForm::MainForm(QWidget *parent) : QMainWindow(parent),
 
 	QLOG("Setting up interface");
 	ui_.setupUi(this);
+    ui_.stackedWidget->setCurrentIndex(3);
 	GUI = this;
+    
+#ifdef _WIN32
+#elif defined (__linux__) 
+    // remove text captions on database manipulation buttons on Linux, use theme icons only
+    ui_.createButton->setText("");
+    ui_.saveButton->setText("");
+    ui_.deleteButton->setText("");
+#endif
 
-    ui_.versionLabel->setText(ui_.versionLabel->text().replace("%VER%", VERSION));
+    ui_.versionLabel->setText(ui_.versionLabel->text().arg(VERSION));
 
 	QString build = ui_.buildLabel->text() + "\nBuild: " + __DATE__ + " " + __TIME__;
-#ifdef _DEBUG
+#ifdef DEBUG
 	build += " Debug";
 #endif
-#ifdef _WIN64
+#if defined(_WIN64) || defined(__x86_64__)
 	build += " x86-64";
 #else
 	build += " x86";
@@ -123,6 +135,7 @@ MainForm::MainForm(QWidget *parent) : QMainWindow(parent),
 	connect(ui_.settingsButton,   SIGNAL(clicked()),                           this, SLOT(slot_settingsButtonClicked()));
 	connect(ui_.aboutButton,      SIGNAL(clicked()),                           this, SLOT(slot_aboutButtonClicked()));
 	connect(ui_.createButton,     SIGNAL(clicked()),                           this, SLOT(slot_database_createClicked()));
+    connect(ui_.saveButton,       SIGNAL(clicked()),                           this, SLOT(slot_database_saveClicked()));
 	connect(ui_.deleteButton,     SIGNAL(clicked()),                           this, SLOT(slot_database_deleteClicked()));
 	connect(ui_.databaseCombo,    SIGNAL(currentIndexChanged(const QString&)), this, SLOT(slot_database_changeCurrent(const QString&)));
 
@@ -153,7 +166,7 @@ MainForm::MainForm(QWidget *parent) : QMainWindow(parent),
 	connect(ui_.settExtDirButton, SIGNAL(clicked()), this, SLOT(slot_settings_altdirButtonClicked()));
 	connect(ui_.settNoDuplCheck,  SIGNAL(clicked()), this, SLOT(slot_settings_nodupCheckClicked()));
 	connect(ui_.settPluginCombo,  SIGNAL(currentIndexChanged(int)), this, SLOT(slot_settings_switchPlugin(int)));
-
+    
 	// process stored settings
 	loadSettings();
 
@@ -208,15 +221,11 @@ MainForm::~MainForm()
 
 Database* MainForm::database(const QString &name) const
 {
-    if (name.isEmpty()) return nullptr;
+    if ( name.isEmpty() ) return nullptr;
     QLOG("Getting database handle for name: '" << name << "'");
-    Database *ret = nullptr, *dbase;
-    for (int i = 0; i < databases_.count(); ++i)
-    {
-        dbase = databases_.at(i);
-        if (dbase->name() == name) { ret = dbase; break; }
-    }
-    return ret;
+    for ( auto db : databases_ ) 
+        if ( db->name() == name ) return db;
+    return nullptr;
 }
 
 void MainForm::addDatabase(Database *dbase)
@@ -389,6 +398,11 @@ void MainForm::slot_dict_searchDone()
 {
 	QLOGX("Search done");
 	dictModel_->endReset();
+    // when results present, shift keyboard focus to results table
+    if ( dictModel_->rowCount(QModelIndex()) ) {
+        ui_.dictionaryTable->selectRow(0);
+        ui_.dictionaryTable->setFocus(Qt::OtherFocusReason);
+    }
 }
 
 void MainForm::slot_dict_tableItemActivated(const QModelIndex &index)
@@ -453,38 +467,24 @@ void MainForm::slot_dict_resizeColumns(const QList<int> &widths)
 // current selection in the combo box indicating current database has changed
 void MainForm::slot_database_changeCurrent(const QString& text)
 {
-	if (text.isEmpty()) return;
-	QLOGX("Current database changed to: " << text );
-	QLOGINC;
+    QLOGX("Current database changed to: '" << text << "'");
+    
+    // enable or disable ui elements depending on whether the dbase combo box is empty or not
+    const bool haveItem = !text.isEmpty();
+    for ( auto widget : std::vector<QWidget*>{ 
+          ui_.databaseCombo, ui_.saveButton, ui_.deleteButton, ui_.dbaseAddButton, ui_.dbaseRemoveButton, ui_.dbaseCopyButton, 
+          ui_.dbaseMoveButton, ui_.dbaseEditButton, ui_.dbaseFindButton, ui_.dbaseExportButton, ui_.dbaseResetButton, ui_.quizButton })
+    {
+        widget->setEnabled( haveItem );
+    }
+            
+    // in case the selection became empty (last database removed),
+    // set current dbase handle to null and disconnect signals from model to database
     curDbase_ = database(text);
-	if (!curDbase_) return; // no database
-
 	dbaseModel_->setDatabase(curDbase_);
-	//ui_.databaseTable->resizeColumnsToContents();
-	slot_database_updateCount(); // update spinboxes' limits
-	ui_.quizRangeToSpin->setValue(curDbase_->entryCount());
-	QLOGDEC;
-}
-
-void MainForm::slot_database_updateCount()
-{
-	// neat trick
-	//QObject *sender = QObject::sender();
-	//const QMetaObject *meta = sender->metaObject();
-	//QLOG("Sender: '" << sender->objectName() << "', class '" << meta->className() << "'");
-
-	QLOG("Updating ranges of quiz spinboxes");
-	// database was altered, element count could have changed, update range spinboxes
-	Q_ASSERT(curDbase_ != nullptr);
-	int itemsmax = curDbase_->entryCount();
-	int itemsmin = 0;
-	if (itemsmax > 0) itemsmin = 1;
-	ui_.quizRangeFromSpin->setMinimum(itemsmin);
-	ui_.quizRangeFromSpin->setMaximum(itemsmax);
-	ui_.quizRangeToSpin->setMinimum(itemsmin);
-	ui_.quizRangeToSpin->setMaximum(itemsmax);
-	ui_.quizTakeSpin->setMinimum(itemsmin);
-	ui_.quizTakeSpin->setMaximum(itemsmax);
+    
+    // update range spinboxes in quiz panel
+	dbaseCountUpdate();
 }
 
 void MainForm::slot_database_createClicked()
@@ -512,7 +512,21 @@ void MainForm::slot_database_createClicked()
 		ui_.databaseCombo->setCurrentIndex(ui_.databaseCombo->count() - 1);
 		ui_.databaseCombo->setEnabled(true);
 		//ui_.databaseCombo->adjustSize();
-	}
+    }
+}
+
+void MainForm::slot_database_saveClicked() {
+    QLOG("Database save button clicked");
+    if (!curDbase_ ) {
+        QLOGX("Current database is null!");
+        return;
+    }
+    
+    auto path = dbaseSavePath(curDbase_);
+    curDbase_->saveXML(path);
+    const auto msg = tr("Database saved to ") + path 
+            + " (" + QString::number(curDbase_->entryCount()) + tr(" items)");
+    statusMessage(msg, MSG_TIMEOUT);
 }
 
 void MainForm::slot_database_deleteClicked()
@@ -524,8 +538,9 @@ void MainForm::slot_database_deleteClicked()
         return;
     }
 
-	if (QMessageBox::question(this, "Question", tr("Are you sure you want to delete the database '") + dbase->name() + "'?", 
-                              QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes) 
+	if (QMessageBox::question(this, "Question", 
+            tr("Are you sure you want to delete the database '") + dbase->name() + "'?", 
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes) 
     {
         QLOGX("User declined database deletion");
         return;
@@ -533,46 +548,36 @@ void MainForm::slot_database_deleteClicked()
 
     const int idx = ui_.databaseCombo->currentIndex();
 	QLOG("Removing database, index: " << idx << ", name: " << dbase->name() << " (combo text: " << ui_.databaseCombo->currentText() << ")");
+    Q_ASSERT(ui_.databaseCombo->currentText() == dbase->name());
 
-	const QString xmlpath = (dbase->external() ? extDir_ : APPDIR) + "/" + dbase->name() + Database::XML_EXT;
+	const QString xmlpath = dbaseSavePath(dbase);
 	QLOG("Removing data file '" << xmlpath << "'");
 	QFile file(xmlpath);
-	if (!file.remove())
-	{
+	if (!file.remove())	{
 		QLOG("Unable to remove file! (Error: " << file.error() << ")");
 	}
 
-    // disconnect signals from model to database
-	dbaseModel_->setDatabase(nullptr);
-	curDbase_ = nullptr;
+    // remove item from dbase selection combobox, triggers slot_database_changeCurrent()
+	ui_.databaseCombo->removeItem(idx);
+
+    // finally, destroy database object    
 	databases_.removeAt(idx);
     delete dbase;
-    
-    // disable UI elements if no databases left
-	if (databases_.empty()) 
-	{
-		ui_.databaseCombo->setEnabled(false);
-		ui_.quizRangeFromSpin->setMinimum(0);
-		ui_.quizRangeFromSpin->setMaximum(0);
-		ui_.quizRangeToSpin->setMinimum(0);
-		ui_.quizRangeToSpin->setMaximum(0);
-		ui_.quizTakeSpin->setMinimum(0);
-		ui_.quizTakeSpin->setMaximum(0);
-	}
-	ui_.databaseCombo->removeItem(idx);
 }
 
 // add buton clicked in database panel
-void MainForm::slot_database_addToClicked()
-{
-	if (!curDbase_)
-	{
-		QMessageBox::information(this, tr("No database"), tr("No user database exists. You must first create one\nto be able to add items to it."));
+void MainForm::slot_database_addToClicked() {
+    QLOG("Database Add button clicked");
+	if ( !curDbase_ ) {
+        popDbaseMissing();
 		return;
 	}
-	if (curDbase_->locked()) { popDbaseLocked(); return; }
-	QLOG("Database Add button clicked");
-	QLOGINC;
+    
+	if ( curDbase_->locked() )  { 
+        popDbaseLocked(); 
+        return; 
+    }
+    
 	// setup database entry dialog, point to current database in combobox
 	setupDbaseDialogCombo(true, true);
 	dbaseDialogUI_.dbaseCombo->setEnabled(false);
@@ -581,133 +586,150 @@ void MainForm::slot_database_addToClicked()
 	dbaseDialogUI_.entryEdit->setEnabled(true);
 	dbaseDialogUI_.entryEdit->setFocus(Qt::OtherFocusReason);
 	dbaseDialogUI_.descEdit->setEnabled(true);
-	dbaseDialog_->setWindowTitle("Add item to current database");
+	dbaseDialog_->setWindowTitle(tr("Add item to current database"));
+    
 	// pop dialog and block, continue if accepted
-	if (dbaseDialog_->exec() == QDialog::Accepted)
-	{
-		QString entry = dbaseDialogUI_.entryEdit->text().simplified();
-		QString desc = dbaseDialogUI_.descEdit->text().simplified();
-		Database *dbase = curDbase_;
-		// empty input doesn't make sense
-		if (entry.isEmpty() || desc.isEmpty()) 
-		{
-			QMessageBox::information(this, tr("Missing input"), tr("Database items can't be empty!"));
-			QLOG("Missing data in user input, done");
-			QLOGDEC;
-			return;
-		}
-		QLOG("Adding entry to database '" << dbase->name() << ", text: '" << entry 
-			<< "', description: '" << desc << "'" );
-        Error error = dbase->add(entry, desc);
-        if (error == Error::DUPLI)
-		{ 
-			QMessageBox::StandardButton button;
-            int dupidx = error.index();
-            const Entry &dupEntry = dbase->entry(dupidx);
-			button = QMessageBox::question(this, tr("Possible duplicate"), 
-				tr("A similar entry was found to already exist in the database:\n'") 
-				+ dupEntry.item() + "' / '" + dupEntry.description() + "' (" + QString::number(dupidx + 1) 
-				+ tr(").\nWhile trying to add entry:\n'") + entry + "' / '" + desc 
-				+ tr("'\nDo you want to add it anyway?"), QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-			if (button == QMessageBox::Yes)
-			{
-				QLOG("User wants to add anyway");
-                error = dbase->add(entry, desc, {}, true);
-                QLOG("Result: " << QString::number(error.type()));
-                Q_ASSERT(error == Error::OK);
-			}
-			else
-			{
-				QLOG("User doesn't want duplicate");
-				QLOGDEC;
-				return;
-			}
-		}
-		ui_.databaseTable->setFocus(Qt::OtherFocusReason);
-		ui_.databaseTable->selectRow(curDbase_->entryCount()-1);
-	}
-	QLOGDEC;
+    if ( dbaseDialog_->exec() != QDialog::Accepted ) {
+        QLOG("User declined entry add dialog");
+        return;
+    }
+        
+    QString entry = dbaseDialogUI_.entryEdit->text().simplified();
+    QString desc = dbaseDialogUI_.descEdit->text().simplified();
+    Database *dbase = curDbase_;
+    
+    // empty input doesn't make sense
+    if (entry.isEmpty() || desc.isEmpty()) {
+        QMessageBox::information(this, tr("Missing input"), tr("Database items can't be empty!"));
+        QLOG("Missing data in user input, done");
+        return;
+    }
+    
+    QLOG("Adding entry to database '" << dbase->name() << ", text: '" << entry << "', description: '" << desc << "'" );
+    Error error = dbase->add(entry, desc);
+    
+    if (error == Error::DUPLI) { 
+        int dupidx = error.index();
+        const Entry &dupEntry = dbase->entry(dupidx);
+        const auto button = QMessageBox::question(this, tr("Possible duplicate"), 
+            tr("A similar entry was found to already exist in the database:\n'") 
+            + dupEntry.item() + "' / '" + dupEntry.description() + "' (" + QString::number(dupidx + 1) 
+            + tr(").\nWhile trying to add entry:\n'") + entry + "' / '" + desc 
+            + tr("'\nDo you want to add it anyway?"), QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        
+        if ( button == QMessageBox::Yes ) {
+            QLOG("User wants to add anyway");
+            error = dbase->add(entry, desc, {}, true);
+            QLOG("Result: " << QString::number(error.type()));
+        }
+        else {
+            QLOG("User doesn't want duplicate");
+            return;
+        }
+    }
+    
+    if ( error == Error::OK ) {
+        ui_.databaseTable->setFocus(Qt::OtherFocusReason);
+        ui_.databaseTable->selectRow(curDbase_->entryCount()-1);
+        dbaseCountUpdate();
+    }
 }
 
 // remove button clicked in database panel
 void MainForm::slot_database_removeFromClicked()
 {
-	if (!curDbase_) return;
-	if (curDbase_->locked()) { popDbaseLocked(); return; }
-	QLOG("Database remove button clicked");
-	QLOGINC;
+    QLOG("Database remove button clicked");
+    if ( !curDbase_ ) {
+        popDbaseMissing();
+		return;
+	}
+    
+	if ( curDbase_->locked() )  { 
+        popDbaseLocked(); 
+        return; 
+    }
+    
 	// retrieve selected indexes
 	QList<int> dbIdxs = getSelectedDbaseTableIdxs();
 
 	// return if no selection
-	if (dbIdxs.isEmpty()) 
-	{
+	if (dbIdxs.isEmpty()) {
 		QLOG("Nothing selected, done");
-		QLOGDEC;
 		return;
 	}
 
-	QLOGNL("Selected item indices (" << dbIdxs.size() << "): ");
-	for (int i = 0; i < dbIdxs.size(); ++i)
-	{
-		QLOGRAW(dbIdxs.at(i) << " ");
-	}
-	QLOGRAW(endl);
+	QLOG("Selected item indices (" << dbIdxs.size() << "): " << dbIdxs);
 
-	// ask for confirmation otherwise
-	QMessageBox::StandardButton button;
-	button = QMessageBox::question(this, "Remove item(s)", 
-		"Are you sure you want to remove " 
-			+ (dbIdxs.size() > 1 ? "these " + QString::number(dbIdxs.size()) 
-			+ " items?" : "this item?"),
+	// ask for confirmation
+	const auto button = QMessageBox::question(this, 
+        tr("Remove item(s)"), 
+		tr("Are you sure you want to remove ") 
+			+ (dbIdxs.size() > 1 ? tr("these ") + QString::number(dbIdxs.size()) + tr(" items?") : tr("this item?")),
 		QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    
 	// remove items
-	if (button == QMessageBox::Yes)
-	{
+	if (button == QMessageBox::Yes)	{
 		Q_ASSERT(curDbase_ != nullptr);
         curDbase_->remove(dbIdxs);
 		ui_.databaseTable->setFocus(Qt::OtherFocusReason);
-		//	TODO:
+		// TODO:
 		//ui_.databaseTable->selectRow(Idxs.first());
 		QLOG("Entries removed");
+        dbaseCountUpdate();
 	}
-	else
-	{
+	else {
 		QLOG("Action cancelled");
 	}
-	QLOGDEC;
 }
 
 // copy button clicked in database panel
 void MainForm::slot_database_copyClicked()
 {
-	if (!curDbase_) return;
-	if (curDbase_->locked()) { popDbaseLocked(); return; }
-	QLOG("Database copy button clicked");
-	QLOGINC;
+    QLOG("Database copy button clicked");
+    if ( !curDbase_ ) {
+        popDbaseMissing();
+		return;
+	}
+    
+	if ( curDbase_->locked() )  { 
+        popDbaseLocked(); 
+        return; 
+    }
+    
 	copyToAnotherDatabase(false);
-	QLOGDEC;
 }
 
 // move button clicked in database panel
 void MainForm::slot_database_moveClicked()
 {
-	if (!curDbase_) return;
-	if (curDbase_->locked()) { popDbaseLocked(); return; }
-	QLOG("Database move button clicked");
-	QLOGINC;
+    QLOG("Database move button clicked");
+    if ( !curDbase_ ) {
+        popDbaseMissing();
+		return;
+	}
+    
+	if ( curDbase_->locked() )  { 
+        popDbaseLocked(); 
+        return; 
+    }
+
 	copyToAnotherDatabase(true);
-	QLOGDEC;
 }
 
 void MainForm::slot_database_editClicked()
 {
-	if (!curDbase_) return;
-	if (curDbase_->locked()) { popDbaseLocked(); return; }
+    QLOG("Database edit button clicked");
+    if ( !curDbase_ ) {
+        popDbaseMissing();
+		return;
+	}
+    
+	if ( curDbase_->locked() )  { 
+        popDbaseLocked(); 
+        return; 
+    }
+    
 	// setup database entry dialog, disable editing, enable combobox
-	QLOG("Database edit button clicked");
-	QLOGINC;
-	// setup database entry dialog
 	setupDbaseDialogCombo(true, true);
 	dbaseDialogUI_.dbaseCombo->setEnabled(false);
 	dbaseDialogUI_.entryEdit->setEnabled(true);
@@ -716,15 +738,13 @@ void MainForm::slot_database_editClicked()
 	dbaseDialog_->setWindowTitle("Edit item");
 	QList<int> dbIdxs = getSelectedDbaseTableIdxs();
 
-	if (dbIdxs.isEmpty())
-	{
+    if (dbIdxs.isEmpty()) {
 		QMessageBox::information(this, tr("Information"), tr("No entry selected in database for editing.\nPlease select something and try again"));
-		QLOGDEC; return;
+        return;
 	}
-	else if (dbIdxs.size() > 1)
-	{
+	else if (dbIdxs.size() > 1)	{
 		QMessageBox::information(this, tr("Information"), tr("Cannot edit more than one entry at a time.\nPlease select single entry and try again"));
-		QLOGDEC; return;
+        return;
 	}
 
 	int idx = dbIdxs.first();
@@ -735,149 +755,150 @@ void MainForm::slot_database_editClicked()
     dbaseDialogUI_.descEdit->setText(e.description());
 
     // pop dialog for user to enter changes and do stuff if ok pressed
-	if (dbaseDialog_->exec() == QDialog::Accepted)
-	{
-        const QString
-                newitem = dbaseDialogUI_.entryEdit->text(),
-                newdesc = dbaseDialogUI_.descEdit->text();
+	if (dbaseDialog_->exec() != QDialog::Accepted) {
+        QLOG("User changes rejected");
+        return;
+    }
+    
+    const QString
+            newitem = dbaseDialogUI_.entryEdit->text(),
+            newdesc = dbaseDialogUI_.descEdit->text();
 
-		if (newitem.isEmpty() || newdesc.isEmpty())
-		{
-            QMessageBox::information(this, tr("Missing input"), tr("Database entries can't have empty fields."));
-			return;
-		}
+    if ( newitem.isEmpty() || newdesc.isEmpty() ) {
+        QMessageBox::information(this, tr("Missing input"), tr("Database entries can't have empty fields."));
+        return;
+    }
 
-		QLOG("User changes accepted");
-        Error error = curDbase_->alter(idx, newitem, newdesc);
-        if (error == Error::DUPLI)
-		{
-			QMessageBox::StandardButton button;
-            int dupidx = error.index();
-            const Entry &dupEntry = curDbase_->entry(dupidx);
-			button = QMessageBox::question(this, tr("Possible duplicate"), 
-				tr("A similar entry was found to already exist in the database:\n'")
-				+ dupEntry.item() + "' / '" + dupEntry.description() + "' (" + QString::number(dupidx + 1) 
-				+ tr(").\nWhile trying to replace entry (") + QString::number(idx + 1) 
-                + tr(") with:\n'") + newitem + "' / '" + newdesc
-				+ tr("'\nDo you want to replace it anyway?"), QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-			if (button == QMessageBox::Yes)
-			{
-				QLOG("User wants to replace anyway");
-                Error error = curDbase_->alter(idx, newitem, newdesc, true);
-                QLOG("Result: " << QString::number(error.type()));
-                Q_ASSERT(error == Error::OK);
-			}
-			else
-			{
-				QLOG("User doesn't want duplicate");
-				QLOGDEC;
-				return;
-			}
-		}
-	}
-	else
-	{
-		QLOG("User changes rejected");
-	}
-	ui_.databaseTable->setFocus(Qt::OtherFocusReason);
-	QLOGDEC;
+    QLOG("User changes accepted");
+    Error error = curDbase_->alter(idx, newitem, newdesc);
+    if (error == Error::DUPLI)
+    {
+        QMessageBox::StandardButton button;
+        int dupidx = error.index();
+        const Entry &dupEntry = curDbase_->entry(dupidx);
+        button = QMessageBox::question(this, tr("Possible duplicate"), 
+            tr("A similar entry was found to already exist in the database:\n'")
+            + dupEntry.item() + "' / '" + dupEntry.description() + "' (" + QString::number(dupidx + 1) 
+            + tr(").\nWhile trying to replace entry (") + QString::number(idx + 1) 
+            + tr(") with:\n'") + newitem + "' / '" + newdesc
+            + tr("'\nDo you want to replace it anyway?"), QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (button == QMessageBox::Yes)
+        {
+            QLOG("User wants to replace anyway");
+            Error error = curDbase_->alter(idx, newitem, newdesc, true);
+            QLOG("Result: " << QString::number(error.type()));
+            Q_ASSERT(error == Error::OK);
+        }
+        else
+        {
+            QLOG("User doesn't want duplicate");
+            return;
+        }
+    }
+
+    ui_.databaseTable->setFocus(Qt::OtherFocusReason);
 }
 
 void MainForm::slot_database_findClicked()
 {
-	if (!curDbase_) return;
-	QLOG("Database find button clicked");
-	QLOGINC;
-	bool ok = false;
-	QString text = QInputDialog::getText(this, tr("Find item in database"), tr("Please enter an expression to search for:"),
-		QLineEdit::Normal, dbaseFindText_, &ok);
-
-	if (ok && !text.isEmpty())
-	{
-		QLOG("Starting search for text: " << text);
-		// store search text for next searches of the same item
-		dbaseFindText_ = text;
-		// get index of first selected row, or 0 (start of table) if none selected. search will start from this row.
-		QList<int> dbIdxs = getSelectedDbaseTableIdxs();
-		int idx = 0;
-		if (!dbIdxs.empty()) idx = dbIdxs.first();
-		// point to next row over selected one to enable for consecutive searches on the same term without getting stuck
-		idx++;
-		// if this will point to the last row in the table search from the top instead
-		if (idx >= curDbase_->entryCount()) idx = 0;
-
-        int found = curDbase_->findEntry(text, idx);
-
-		// last resort to get a match if search started from somewhere in the table, not the beggining
-		if (found < 0 && idx != 0)
-		{
-			QLOG("Last resort search from the top");
-            found = curDbase_->findEntry(text, 0);
-		}
-		if (found < 0)
-		{
-			QLOG("Nothing found.");
-			QMessageBox::information(this, tr("No results"), tr("Sorry, no results were found for '") + text + "'");
-
-		}
-		else
-		{
-			QModelIndex pidx = dbaseProxyModel_.mapFromSource(dbaseModel_->index(found, 0));
-			QLOG("Found dbase idx: " << found << ", proxy: " << pidx.row());
-			ui_.databaseTable->selectRow(pidx.row());
-			ui_.databaseTable->setFocus(Qt::OtherFocusReason);
-		}
+    QLOG("Database find button clicked");
+    if ( !curDbase_ ) {
+        popDbaseMissing();
+		return;
 	}
-	QLOGDEC;
+    
+	bool ok = false;
+	const auto text = QInputDialog::getText(
+                this, tr("Find item in database"), tr("Please enter an expression to search for:"),
+                QLineEdit::Normal, dbaseFindText_, &ok);
+
+    if ( !ok || text.isEmpty() ) {
+        QLOG("Find dialog not accepted");
+        return;
+    }
+    
+    QLOG("Starting search for text: " << text);
+    // store search text for next searches of the same item
+    dbaseFindText_ = text;
+    // get index of first selected row, or 0 (start of table) if none selected. search will start from this row.
+    QList<int> dbIdxs = getSelectedDbaseTableIdxs();
+    int idx = 0;
+    if (!dbIdxs.empty()) idx = dbIdxs.first();
+    // point to next row over selected one to enable for consecutive searches on the same term without getting stuck
+    idx++;
+    // if this will point to the last row in the table search from the top instead
+    if (idx >= curDbase_->entryCount()) idx = 0;
+
+    int found = curDbase_->findEntry(text, idx);
+
+    // last resort to get a match if search started from somewhere in the table, not the beggining
+    if (found < 0 && idx != 0) {
+        QLOG("Last resort search from the top");
+        found = curDbase_->findEntry(text, 0);
+    }
+    if (found < 0) {
+        QLOG("Nothing found.");
+        QMessageBox::information(this, tr("No results"), tr("Sorry, no results were found for '") + text + "'");
+
+    }
+    else {
+        QModelIndex pidx = dbaseProxyModel_.mapFromSource(dbaseModel_->index(found, 0));
+        QLOG("Found dbase idx: " << found << ", proxy: " << pidx.row());
+        ui_.databaseTable->selectRow(pidx.row());
+        ui_.databaseTable->setFocus(Qt::OtherFocusReason);
+    }
 }
 
 void MainForm::slot_database_exportClicked()
 {
 	QLOG("Database export button clicked");
-	QLOGINC;
-	Q_ASSERT(curDbase_ != nullptr);
+    if ( !curDbase_ ) {
+        popDbaseMissing();
+		return;
+	}
+    
 	QString fname = QFileDialog::getSaveFileName(this, tr("Export database"), QDir::homePath(), tr("HTML (*.htm *.html)"));
-	if (fname.isEmpty())
-	{
+	if ( fname.isEmpty() ) {
 		QLOG("No file selected to save");
 		return;
 	}
-	else
-	{
-		if (! (fname.endsWith(".htm", Qt::CaseInsensitive) || fname.endsWith(".html", Qt::CaseInsensitive))) fname.append(".html");
+	else {
+		if (! (fname.endsWith(".htm", Qt::CaseInsensitive) || fname.endsWith(".html", Qt::CaseInsensitive))) 
+            fname.append(".html");
+        
 		QLOG("Exporting to file: '" << fname << "'");
 		QList<int> idxs = getSelectedDbaseTableIdxs();
 		bool ok = curDbase_->htmlExport(fname, idxs);
 		if (!ok) QMessageBox::information(this, tr("Unable to export"), tr("Couldn't open file for writing: '") + fname + "'.");
 	}
-	QLOGDEC;
 }
 
-void MainForm::slot_database_resetClicked()
-{
+void MainForm::slot_database_resetClicked() {
 	QLOG("Database reset button clicked");
-	QLOGINC;
-	Q_ASSERT(curDbase_ != nullptr);
-	QMessageBox::StandardButton button = QMessageBox::warning(this, tr("Database reset"), tr("All quiz points, failure counters and test dates will be reset for database '") + curDbase_->name() 
-		+ tr("'. Are you sure?"), QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-	if (button == QMessageBox::No)
-	{
+    if ( !curDbase_ ) {
+        popDbaseMissing();
+		return;
+	}
+    
+	const auto button = QMessageBox::warning(this, 
+        tr("Database reset"), 
+        tr("All quiz points, failure counters and test dates will be reset for database '") + curDbase_->name() 
+            + tr("'. Are you sure?"), 
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    
+	if (button == QMessageBox::No) {
 		QLOG("User canceled");
 		return;
 	}
-	else 
-	{
+	else {
 		QLOG("Proceeding to erase database contents");
 		curDbase_->reset();
 	}
-	QLOGDEC;
 }
 
-void MainForm::slot_quiz_clicked()
-{
+void MainForm::slot_quiz_clicked() {
     if ( !curDbase_ ) {
-		QMessageBox::information(this, tr("No database"), 
-			tr("No user database exists. You must first create one and add items to it to run a quiz"));
+        popDbaseMissing();
 		return;
 	}
     
@@ -1127,13 +1148,12 @@ void MainForm::slot_settings_switchPlugin(int plugIdx)
 void MainForm::slot_setupDone()
 {
     QLOGX("Setup done, will enable interface");
-	QLOGINC;
-
 	ui_.statusBar->clearMessage();
 
 	applySettings();
+    
 	// connect here, because the state is changed earlier based on the value of altdir from settings
-	// todo: use blockSignals?
+	// TODO: use blockSignals instead?
 	connect(ui_.settExtDirCheck, SIGNAL(clicked(bool)), this, SLOT(slot_settings_altdirCheckClicked(bool)));
 	ui_.settExtDirEdit->setText(extDir_);
 	if (!extDir_.isEmpty()) ui_.settExtDirCheck->setChecked(true);
@@ -1155,7 +1175,9 @@ void MainForm::slot_setupDone()
 	ui_.dictionaryTable->setModel(dictModel_);
 	dictModel_->setSource(curPlugin_);
 	header->blockSignals(false);
-	if (curPlugin_)	curPlugin_->activate();
+    
+	if ( curPlugin_ ) 
+        curPlugin_->activate();
 
 	// create database table model
     dbaseModel_ = new Model();
@@ -1166,17 +1188,15 @@ void MainForm::slot_setupDone()
 
     // reparent the database items to the main window, this causes events to get sent so it can't
     // be done from the setup thread
-    for (auto dbase : databases_) {
-        if (!dbase->parent()) dbase->setParent(this);
-    }
+    for (auto dbase : databases_)
+        if ( !dbase->parent() ) dbase->setParent(this);
+    
     // fill database selection combo box with databases created from user xml files on startup
-	updateDbaseCombo(true);
-
-	QLOGDEC;
+	reloadDbaseCombo(true);
 }
 
 void MainForm::slot_updateSetupMsg(const QString &msg) {
-	ui_.statusBar->showMessage(msg);
+	statusMessage(msg);
 }
 
 void MainForm::slot_testClicked() {
@@ -1405,14 +1425,44 @@ void MainForm::applySettings()
 
 	ui_.settNoDuplCheck->setChecked(preventDuplicates_);
 
-	QLOGDEC;
+    QLOGDEC;
+}
+
+void MainForm::statusMessage(const QString &text, const int timeoutMs) {
+    ui_.statusBar->showMessage(text, timeoutMs);
+}
+
+void MainForm::dbaseCountUpdate()
+{
+	QLOG("Updating database item count");
+    int max = 0 , min = 0;
+    if (curDbase_) {
+        QLOG("Current database is '" << curDbase_->name() << "'");
+        max = curDbase_->entryCount();
+        if (max > 0) min = 1;
+    }
+    QLOG("Determined min = " << min << ", max = " << max);
+    
+	// update range spinboxes in quiz panel
+	ui_.quizRangeFromSpin->setMinimum(min);
+	ui_.quizRangeFromSpin->setMaximum(max);
+	ui_.quizRangeToSpin->setMinimum(min);
+	ui_.quizRangeToSpin->setMaximum(max);
+	ui_.quizTakeSpin->setMinimum(min);
+	ui_.quizTakeSpin->setMaximum(max);
+}
+
+QString MainForm::dbaseSavePath(const Database *db) const {
+    if (!db) return {};
+    
+    return (db->external() ? extDir_ : APPDIR) + QDir::separator() + db->name() + Database::XML_EXT;
 }
 
 void MainForm::reloadExternalDbases(const QString &newdir)
 {
-	QLOGX("Scanning directory '" << newdir << "' for databases");
-	QLOGINC;
-	QLOG("Looking for databases from old directory ('" << extDir_ << "')");
+    QLOGX("Scanning directory '" << newdir << "' for databases");
+    QLOGINC;
+    QLOG("Looking for databases from old directory ('" << extDir_ << "')");
 
 	ui_.databaseCombo->setEnabled(false);
 	ui_.createButton->setEnabled(false);
@@ -1473,7 +1523,7 @@ void MainForm::reloadExternalDbases(const QString &newdir)
     QList<Database*> dbs = SetupThread::loadDbases(newdir, true);
     databases_.append(dbs);
 	ui_.statusBar->clearMessage();
-	updateDbaseCombo(false);
+	reloadDbaseCombo(false);
 	extDir_ = newdir;
 	ui_.settExtDirEdit->setText(newdir);
 
@@ -1484,39 +1534,34 @@ void MainForm::reloadExternalDbases(const QString &newdir)
 	QLOGDEC;
 }
 
-void MainForm::updateDbaseCombo(bool restore)
-{
-	int selidx = 0;
-	ui_.databaseCombo->clear();
-    if (databases_.empty())
-    {
-        QLOGX("Database combo is empty");
-        ui_.databaseCombo->setEnabled(false);
-        return;
-    }
-
-    QLOGX("Filling combo box with data for " << databases_.size() << " disk databases");
-    QLOGINC;
+void MainForm::reloadDbaseCombo(const bool restoreSelection) {
+    QLOGX("Filling combo box with data for " << databases_.size() << " databases");
+    // prevent firing of slot_database_changeCurrent() while we add the items
     ui_.databaseCombo->blockSignals(true);
-    for (int i = 0; i < databases_.size(); ++i)
-    {
-        Database *dbase = databases_[i];
+    ui_.databaseCombo->clear();
+    
+    for ( auto dbase : databases_ )
         ui_.databaseCombo->addItem(dbase->name());
-        if (dbase->name() == firstDbase_) selidx = i;
+    
+    // restore stored default database index from settings if requested
+    // can't do this reliably when changing the user dir, only on startup
+    if ( restoreSelection ) {
+        const int idx = ui_.databaseCombo->findText( firstDbase_ );
+        if (idx >= 0) {
+            QLOG("Restored current dbase to " << idx << " (" << ui_.databaseCombo->currentText() << ")");
+            ui_.databaseCombo->setCurrentIndex( idx );
+        }
+        else {
+            QLOG("Unable to find index for restore dbase '" + firstDbase_ + "'");
+        }
     }
-    // restore stored default database index from settings if requested. Can't to this reliably when changing the user dir,
-    // only on startup
-    if (restore)
-    {
-        ui_.databaseCombo->setCurrentIndex(selidx);
-        QLOG("Set current index to " << selidx << " (" << ui_.databaseCombo->currentText() << ")");
-    }
-    // have to invoke manually in case stored index was 0 (treated as no change and hence no signal emitted)
+    
+    // have to trigger manually in case stored index was 0 (treated as no change and hence no signal emitted)
     slot_database_changeCurrent(ui_.databaseCombo->currentText());
 
     ui_.databaseCombo->setEnabled(true);
+    // restore normal firing of slot_database_changeCurrent()
     ui_.databaseCombo->blockSignals(false);
-    QLOGDEC;
 }
 
 /// Find index of a given text within a combo box. Returns -1 if not found.
@@ -1555,34 +1600,25 @@ void MainForm::setupDbaseDialogCombo(bool includeCurrent, bool selCurrent)
 	}
 }
 
-QList<int> MainForm::getSelectedDbaseTableIdxs()
-{
-	QModelIndexList allIdxs = ui_.databaseTable->selectionModel()->selectedRows();
-	QLOGX("all indexes: " << allIdxs.count());
-	QLOGINC;
+QList<int> MainForm::getSelectedDbaseTableIdxs() {
+	auto allIdxs = ui_.databaseTable->selectionModel()->selectedRows();
+	QLOGX("Selected indexes in database table: " << allIdxs.count());
 
 	QList<int> rowIdxs;
-	int dbaseidx;
-
-	for (int i = 0; i < allIdxs.size(); ++i)
-	{
-		const QModelIndex &idx = allIdxs.at(i);
-		QLOG("row: " << idx.row() << ", col: " << idx.column());
-		if (idx.column() == 0) 
-		{
-			dbaseidx = dbaseModel_->data(dbaseProxyModel_.mapToSource(idx), Qt::UserRole).toInt();
-			QLOG("New dbase idx: " << dbaseidx);
-			rowIdxs.append(dbaseidx);
-		}
+	for (const auto &idx : allIdxs)	{
+		if (idx.column() != 0) 
+            continue;
+        
+        QLOG("row: " << idx.row() << ", col: " << idx.column());
+        int dbaseidx = dbaseModel_->data( dbaseProxyModel_.mapToSource( idx ), Qt::UserRole).toInt();
+        QLOG("New dbase idx: " << dbaseidx);
+        rowIdxs.append( dbaseidx );
 	}
 
-	QLOGDEC;
 	return rowIdxs;
 }
 
-// the move operation is almost identical to the copy operation, hence it makes sense to
-// unite and export them here
-void MainForm::copyToAnotherDatabase(bool move)
+void MainForm::copyToAnotherDatabase(const bool move)
 {
     // setup database entry dialog: disable item/desc editing, enable database selection combobox
 	setupDbaseDialogCombo(false, false);
@@ -1595,30 +1631,20 @@ void MainForm::copyToAnotherDatabase(bool move)
 	dbaseDialogUI_.dbaseCombo->setEnabled(true);
 	dbaseDialogUI_.entryEdit->setEnabled(false);
 	dbaseDialogUI_.descEdit->setEnabled(false);
-	if (move)
-	{
-		dbaseDialog_->setWindowTitle("Move item(s) to another database");
-	}
-	else
-	{
-		dbaseDialog_->setWindowTitle("Copy item(s) to another database");
-	}
+    
+    const QString dialogTitle = (move ? tr("Move item(s) to another database") : 
+                                        tr("Copy item(s) to another database"));
+    dbaseDialog_->setWindowTitle( dialogTitle );
 
     // retrieve indexes of selected database items (may copy in bulk)
 	QList<int> dbIdxs = getSelectedDbaseTableIdxs();
 	// return if no selection
-	if (dbIdxs.isEmpty()) 
-	{
+	if (dbIdxs.isEmpty()) {
 		QLOG("Nothing selected, done");
 		return;
 	}
 
-	QLOGNL("Selected rows (" << dbIdxs.size() << "): ");
-	for (int i = 0; i < dbIdxs.size(); ++i)
-	{
-		QLOGRAW(dbIdxs.at(i) << " ");
-	}
-	QLOGRAW(endl);
+	QLOG("Selected rows (" << dbIdxs.size() << "): " << dbIdxs);
 
     if (curDbase_ == nullptr) {
         QLOG("Current database handle is nullptr!");
@@ -1626,16 +1652,14 @@ void MainForm::copyToAnotherDatabase(bool move)
     }
 
     // if only one item selected, fill dialog with its data
-    if (dbIdxs.size() == 1)
-    {
+    if (dbIdxs.size() == 1) {
         QLOG("Single item mode");
         const Entry &entry = curDbase_->entry(dbIdxs.at(0));
         dbaseDialogUI_.entryEdit->setText(entry.item());
         dbaseDialogUI_.descEdit->setText(entry.description());
     }
     // otherwise indicate multiple selections
-    else
-    {
+    else {
         QLOG("Multiple items mode");
         dbaseDialogUI_.entryEdit->setText(tr(" -- multiple -- "));
         dbaseDialogUI_.descEdit->setText(tr(" -- multiple -- "));
@@ -1654,43 +1678,36 @@ void MainForm::copyToAnotherDatabase(bool move)
         return;
     }
 
-    QLOG("Copying " << dbIdxs.size() <<  " item(s) to database '"
-         << target->name() << "'" );
+    QLOG("Copying " << dbIdxs.size() <<  " item(s) to database '" << target->name() << "'" );
 
     // bulk copy items to target database from current database
     // TODO: does it even make sense to have this function? perhaps, if DbError
     // held all the error indices, it would be possible to add in bulk and
     // then process the remainder as per user answer(s)
     int answer = QMessageBox::NoButton;
-    QList<int> okIdxs;
-    for (int i = 0; i < dbIdxs.size(); ++i)
-    {
-        const Entry &entry = curDbase_->entry(dbIdxs.at(i));
-        const QString
-                itemText = entry.item(),
-                descText = entry.description();
+    QList<int> moveIdxs;
+    for (int curIdx : dbIdxs) {
+        const Entry &entry = curDbase_->entry( curIdx );
+        auto itemText = entry.item();
+        auto descText = entry.description();
 
         // if go-ahead given, ignore duplicates
-        if (answer == QMessageBox::YesToAll)
-        {
+        if ( answer == QMessageBox::YesToAll ) {
             Error error = target->add(itemText, descText, {}, true);
             Q_ASSERT(error == Error::OK);
-            if (move) okIdxs.append(dbIdxs.at(i));
+            if ( move ) moveIdxs.append( curIdx );
         }
-        // don't ignore duplicates (yet)
-        else
-        {
+        else {
+            // don't ignore duplicates (yet)
             Error error = target->add(itemText, descText, {}, false);
             // check error type,
-            if (error == Error::OK)
-            {
+            if (error == Error::OK) {
                 // in move mode, add index to successfully copied list for later removal from source
-                if (move) okIdxs.append(dbIdxs.at(i));
+                if ( move ) moveIdxs.append( curIdx );
                 continue;
             }
             // if duplicate detected, warn
-            else if (error == Error::DUPLI && answer != QMessageBox::NoToAll)
-            {
+            else if ( error == Error::DUPLI && answer != QMessageBox::NoToAll ) {
                 const Entry &dupEntry = target->entry(error.index());
                 answer = QMessageBox::information(this, tr("Duplicate entry"),
                                                   tr("Possible duplicate found for '") + entry.item() + "' (" + entry.description() +
@@ -1698,30 +1715,38 @@ void MainForm::copyToAnotherDatabase(bool move)
                                                   tr("). Continue?"),
                                                   QMessageBox::Yes | QMessageBox::No | QMessageBox::YesToAll | QMessageBox::NoToAll);
             }
+            
             // retry item add with duplicates ignored on "yes" or "yes to all"
-            if (answer == QMessageBox::Yes || answer == QMessageBox::YesToAll)
-            {
+            if ( answer == QMessageBox::Yes || answer == QMessageBox::YesToAll ) {
                 error = target->add(itemText, descText, {}, true);
                 if (error != Error::OK) {
                     QLOG("Unable to add to database despite ignoring duplicates?! (" << error.msg() << ")");
                     return;
                 }
-                if (move) okIdxs.append(dbIdxs.at(i));
+                if ( move ) moveIdxs.append( curIdx );
             }
-        }
-    }
+        } // not YesToAll
+    } // iterate over input indexes
 
 
-    if (move)
-    {
+    if ( move && !moveIdxs.isEmpty() ) {
         QLOG("Removing item(s) from source database");
-        curDbase_->remove(okIdxs);
+        curDbase_->remove(moveIdxs);
+        dbaseCountUpdate();
     }
+}
+
+void MainForm::popDbaseMissing() {
+    QMessageBox::information(this, 
+                             tr("No database"), 
+                             tr("No user database exists. You must first create one\nto be able to add items to it."));    
 }
 
 void MainForm::popDbaseLocked()
 {
-    QMessageBox::information(this, tr("Database locked"), tr("The current database is being used and cannot be altered right now."));
+    QMessageBox::information(this, 
+                             tr("Database locked"), 
+                             tr("The current database is being used and cannot be altered right now."));
 }
 
 void MainForm::addToDatabase(const QString &item, const QString &desc)
@@ -1889,7 +1914,7 @@ void MainForm::closeEvent(QCloseEvent *event)
 			// save if yes pushed
 			if (button == QMessageBox::Yes) 
 			{
-				const QString xmlpath = (dbase->external() ? extDir_ : APPDIR) + "/" + dbase->name() + Database::XML_EXT;
+				const auto xmlpath = dbaseSavePath(dbase);
 				QLOG("Saving database to '" << xmlpath << "'");
 				dbase->saveXML(xmlpath);
 			}
