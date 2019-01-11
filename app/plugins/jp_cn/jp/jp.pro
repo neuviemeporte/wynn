@@ -5,11 +5,10 @@ TARGET = wynnplugin-jp
 
 MAINDIR = ../../..
 TOPDIR = $$MAINDIR/..
-APPDIR = $$MAINDIR/app
 include($$TOPDIR/common.pri)
 
 DEFINES += JP_PLUGIN_LIB
-INCLUDEPATH = $$IXPLOG/include $$IXPDICT/include $$APPDIR
+INCLUDEPATH = $$IXPLOG/include $$IXPDICT/include $$PLUGINS
 LIBS += -lixplog -lixpdict
 
 FORMS += \

@@ -8,11 +8,10 @@ include($$TOPDIR/common.pri)
 
 DBDIR = ../db
 DEPENDPATH += res ui
-INCLUDEPATH += .. $$IXPLOG/include
+INCLUDEPATH += .. $$IXPLOG/include $$PLUGINS
 LIBS += -L$$DBDIR -lwynndb -lixplog
 
-HEADERS += dict_plugin.h \
-           dict_table.h \
+HEADERS += dict_table.h \
            global.h \
            setup.h \
 	   window.h

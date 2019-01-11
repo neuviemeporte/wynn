@@ -5,9 +5,8 @@ TARGET = wynnplugin-de
 
 TOPDIR = ../../..
 include($$TOPDIR/common.pri)
-APPDIR = ../../app
 
-INCLUDEPATH = $$IXPLOG/include $$IXPDICT/include $$APPDIR
+INCLUDEPATH = $$IXPLOG/include $$IXPDICT/include $$PLUGINS
 DEFINES += DE_PLUGIN_LIB
 LIBS += -lixplog -lixpdict
 

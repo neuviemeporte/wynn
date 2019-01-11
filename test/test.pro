@@ -10,7 +10,7 @@ TARGET = test
 TOPDIR = ..
 include($$TOPDIR/common.pri)
 
-INCLUDEPATH += $$IXPLOG/include $$IXPDICT/include $$WYNNDB
+INCLUDEPATH += $$IXPLOG/include $$IXPDICT/include $$DATABASE
 LIBS += -lixpdict -lwynndb -lixplog 
 
 SOURCES += \

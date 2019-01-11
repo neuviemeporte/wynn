@@ -4,12 +4,11 @@ QT += widgets
 TARGET = wynnplugin-cn
 
 MAINDIR = ../../..
-APPDIR = $$MAINDIR/app
 TOPDIR = $$MAINDIR/..
 include($$TOPDIR/common.pri)
 
 DEFINES += CN_PLUGIN_LIB
-INCLUDEPATH = $$IXPLOG/include $$IXPDICT/include $$APPDIR
+INCLUDEPATH = $$IXPLOG/include $$IXPDICT/include $$PLUGINS
 LIBS += -lixplog -lixpdict
 
 FORMS += \
