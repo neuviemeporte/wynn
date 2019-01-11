@@ -14,7 +14,9 @@ LIBS += -L$$BUILD_DIR
 IXPLOG = $$TOPDIR/libixplog
 IXPDICT = $$TOPDIR/libixpdict
 IXPTEST = $$TOPDIR/libixptest
-DATABASE = $$TOPDIR/app/db
+APPDIR = $$TOPDIR/app
+DATABASE = $$APPDIR/db
+LOGIC = $$APPDIR/logic
 PLUGINS = $$TOPDIR/app/plugins
 
 unix:isEmpty(PREFIX) {

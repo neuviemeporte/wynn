@@ -13,8 +13,6 @@
 namespace wynn {
 namespace db {
 
-enum QuizDirection;
-
 class DatabaseInterface {
 public:
     virtual ~DatabaseInterface() {}

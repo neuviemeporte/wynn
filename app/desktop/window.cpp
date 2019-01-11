@@ -27,12 +27,11 @@
 
 #include "global.h"
 #include "window.h"
+#include "backend.h"
 #include "setup.h"
 #include "dict_table.h"
 #include "dict_plugin.h"
-#include "db/database.h"
 #include "db/model.h"
-#include "db/quiz.h"
 #include "ixplog_active.h"
 
 QWidget *GUI;
@@ -69,17 +68,16 @@ const int MSG_TIMEOUT = 2000;
 // ============================== MainForm: public
 // ==============================================================================================
 
-MainForm::MainForm(QWidget *parent) : QMainWindow(parent),
+MainForm::MainForm(Backend *backend) : QMainWindow(nullptr),
+    backend_(backend),
     curPlugin_(nullptr),
-    curDbase_(nullptr), 
-    dbaseModel_(nullptr), 
     dbaseFindText_(""),
     dictModel_(nullptr),
     dbaseDialog_(nullptr), 
     quizDialog_(nullptr),
-    setupThread_(nullptr), 
-    quiz_(nullptr)
+    setupThread_(nullptr)
 {
+    Q_ASSERT(backend != nullptr);
 	// open debug log
 	APP_LOGSTREAM = new QTSLogger("wynn_log.txt");
 	QLOG("Main window constructor is active");
@@ -117,6 +115,7 @@ MainForm::MainForm(QWidget *parent) : QMainWindow(parent),
 	QLOG("Setting up database entry dialog");
 	dbaseDialog_ = new QDialog(this);
 	dbaseDialogUI_.setupUi(dbaseDialog_);
+    connect(dbaseDialog_, SIGNAL(accepted()), this, SLOT(slot_dict_toDbaseAccepted()));
 
 	QLOG("Setting up quiz dialog");
 	quizDialog_ = new QDialog(this);
@@ -183,30 +182,19 @@ MainForm::MainForm(QWidget *parent) : QMainWindow(parent),
 MainForm::~MainForm()
 {
 	QLOG("MainForm destructor active");
-	QLOGINC;
 
 	saveSettings();
 
     // don't need to delete things like the dialogs which are created as children of the main window;
     // they will be destroyed automatically.
 	delete dictModel_;
-	delete dbaseModel_;
-	delete quiz_;
-
-	QLOG("Iterating over user databases and deleting their handles");
-	for (int i = 0; i < databases_.size(); ++i)
-	{
-		Database *dbase = databases_.at(i);
-		delete dbase;
-	}
 
 	// Need to remove all dictionary widgets from the dictionary panel manually before destroying plugins,
 	// because plugins are supposed to dispose of these widgets themselves.
 	clearPluginStacks(false);
 
 	// Don't need to delete plugins manually here, they will be destroyed automatically when the application terminates.
-	for (int i = 0; i < pluginCount(); ++i)
-	{
+	for (int i = 0; i < pluginCount(); ++i)	{
 		QPluginLoader *loader = pluginLoader(i);
 		DictionaryPlugin *plug = qobject_cast<DictionaryPlugin*>(loader->instance());
 		Q_ASSERT(plug);
@@ -219,22 +207,6 @@ MainForm::~MainForm()
 	delete APP_LOGSTREAM;
 }
 
-Database* MainForm::database(const QString &name) const
-{
-    if ( name.isEmpty() ) return nullptr;
-    QLOG("Getting database handle for name: '" << name << "'");
-    for ( auto db : databases_ ) 
-        if ( db->name() == name ) return db;
-    return nullptr;
-}
-
-void MainForm::addDatabase(Database *dbase)
-{
-    Q_ASSERT(dbase);
-    QLOGX("Adding handle for database '" << dbase->name() << "'");
-    databases_.append(dbase);
-}
-
 // ==============================================================================================
 // ============================== MainForm: public slots - top-level
 // ==============================================================================================
@@ -242,36 +214,28 @@ void MainForm::addDatabase(Database *dbase)
 void MainForm::slot_dictionaryButtonClicked()
 {
 	QLOGX("Switching to dictionary panel");
-	QLOGINC;
 	QHeaderView *header = ui_.dictionaryTable->horizontalHeader();
 	header->blockSignals(true);
 	ui_.stackedWidget->setCurrentIndex(0);
 	header->blockSignals(false);
-	QLOGDEC;
 }
 
 void MainForm::slot_manageButtonClicked()
 {
 	QLOGX("Switching to database panel");
-	QLOGINC;
 	ui_.stackedWidget->setCurrentIndex(1);
-	QLOGDEC;
 }
 
 void MainForm::slot_settingsButtonClicked()
 {
 	QLOGX("Switching to settings panel");
-	QLOGINC;
 	ui_.stackedWidget->setCurrentIndex(2);
-	QLOGDEC;
 }
 
 void MainForm::slot_aboutButtonClicked()
 {
 	QLOGX("Switching to info panel");
-	QLOGINC;
 	ui_.stackedWidget->setCurrentIndex(3);
-	QLOGDEC;
 }
 
 // ==============================================================================================
@@ -281,7 +245,6 @@ void MainForm::slot_aboutButtonClicked()
 void MainForm::slot_dict_switchPlugin(int plugIdx)
 {
 	QLOGX("Dictionary language changed to: " << plugIdx);
-	QLOGINC;
 
 	if (curPlugin_) curPlugin_->deactivate();
 	curPlugin_ = plugin(plugIdx);
@@ -317,14 +280,11 @@ void MainForm::slot_dict_switchPlugin(int plugIdx)
 	dictModel_->setSource(curPlugin_);
 	header->blockSignals(false);
 	curPlugin_->activate();
-
-	QLOGDEC;
 }
 
 void MainForm::slot_dict_langAboutClicked()
 {
 	QLOGX("Plugin about button clicked");
-	QLOGINC;
 
 	Q_ASSERT(curPlugin_);
 	const QString
@@ -332,20 +292,15 @@ void MainForm::slot_dict_langAboutClicked()
 		plugDesc = curPlugin_->description();
 
 	QMessageBox::information(this, plugName, plugDesc);
-
-	QLOGDEC;
 }
 
 void MainForm::slot_dict_detailsClicked()
 {
 	QLOGX("Showing dictionary search result item details");
-	QLOGINC;
 
 	QModelIndex idx = ui_.dictionaryTable->currentIndex();
 	QLOG("Table row: " << idx.row());
 	if (idx.row() >= 0) curPlugin_->showResultDetails(idx.row());
-
-	QLOGDEC;
 }
 
 // button clicked in a details dialog or the dictionary results table to add current dictionary
@@ -353,39 +308,99 @@ void MainForm::slot_dict_detailsClicked()
 void MainForm::slot_dict_toDbaseClicked()
 {
 	QLOGX("Dictionary to database button clicked");
-	// pop info and return if no database
-	if (!curDbase_)
-	{
-		QLOG("Database pointer invalid, aborting");
-		QMessageBox::information(this, tr("No database"), tr("No user database exists. You must first create one to be able to add items to it."));
-		return;
-	}
-	if (curDbase_->locked()) 
-	{ 
-		QLOG("Database locked, aborting");
-		popDbaseLocked(); 
-		return; 
-	}
+    if (backend_->databaseState() != DB_NORM) {
+        popDbaseDialog(backend_->databaseState());
+        return;
+    }
 
-	// return if nothing in table
-	// get currently selected row
+	// get currently selected row in table
 	QModelIndex index = ui_.dictionaryTable->currentIndex();
 	// return if nothing selected in table
-	if (!index.isValid()) 
-	{ 
+	if (!index.isValid()) { 
 		QLOG("Noting selected in table, aborting");
 		return; 
 	}
 
+    // extract item/desc data from current plugin
 	QStringList data = curPlugin_->getResultForDatabase(index.row());
-	if (data.size() != 2)
-	{
+	if (data.size() != 2) {
 		QLOG("Invalid data from plugin");
 		return;
 	}
 
+    const QString &item = data.first(), &desc = data.last();
+    QLOG("Received database candidate, item: " << item << ", desc: " << desc);
+
     // pop dialog asking letting user edit the item before adding to database
-    addToDatabase(data.first(), data.last());
+    // fill add dialog's combo box with currently existing databases
+    setupDbaseDialogCombo(true, true);
+    dbaseDialogUI_.entryEdit->setText(item);
+    dbaseDialogUI_.descEdit->setText(desc);
+    dbaseDialogUI_.dbaseCombo->setEnabled(true);
+    dbaseDialog_->setWindowTitle("Add item to database");
+
+    QLOG("Showing dialog for adding entry to database (current: " << backend_->databaseName() << ")" );
+
+    // show dialog for user to accept the operation
+    dbaseDialog_->open();
+}
+
+void MainForm::slot_dict_toDbaseAccepted()
+{
+    // retrieve input from dialog (entry, description, selected database)
+    const QString
+            userItem  = dbaseDialogUI_.entryEdit->text().simplified(),
+            userDesc  = dbaseDialogUI_.descEdit->text().simplified(),
+            dbName    = dbaseDialogUI_.dbaseCombo->currentText();
+
+    // guard against empty input on line edits
+    if (userItem.isEmpty() || userDesc.isEmpty())
+    {
+        QMessageBox::warning(this, "Error", "Entry and Description fields may not be empty!");
+        return;
+    }
+
+    Database *dbase = database(dbName);
+    if (dbase == nullptr) 
+    {
+        QLOG("Could not find handle to database!");
+        return;
+    }
+
+    QLOG("Adding entry to database '" << dbase->name() << "' (combo: " << dbName
+        << "), item: '" << userItem << "', description: '" << userDesc << "'" );
+
+    auto error = dbase->add(userItem, userDesc);
+
+    if (error == Error::DUPLI) 
+    {
+        // TODO: could be duplicate of multiple items, show all of them in the dialog
+        int dupidx = error.index();
+        const Entry &dupEntry = dbase->entry(dupidx);
+        const auto button = QMessageBox::question(this, tr("Possible duplicate"),
+            tr("A similar entry was found to already exist in the database:\n'")
+            + dupEntry.item() + "' / '" + dupEntry.description() + "' (" + QString::number(dupidx + 1)
+            + tr(").\nWhile trying to add entry:\n'") + userItem + "' / '" + userDesc
+            + tr("'\nDo you want to add it anyway?"), QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+
+        if (button == QMessageBox::Yes) 
+        {
+            QLOG("User wants to add anyway");
+            error = dbase->add(userItem, userDesc, {}, true);
+            QLOG("Result: " << QString::number(error.type()));
+            // todo handle nested error
+            if (error != Error::OK) 
+            {
+                QLOG("Unable to add to database even with duplicates ignored?! (" << error.msg() << ")");
+                return;
+            }
+        }
+        else 
+        {
+            QLOG("User doesn't want duplicate");
+            return;
+        }
+    }    
 }
 
 void MainForm::slot_dict_searchStart()
@@ -478,9 +493,9 @@ void MainForm::slot_database_changeCurrent(const QString& text)
         widget->setEnabled( haveItem );
     }
             
+    backend_->switchDatabase(text);
     // in case the selection became empty (last database removed),
     // set current dbase handle to null and disconnect signals from model to database
-    curDbase_ = database(text);
 	dbaseModel_->setDatabase(curDbase_);
     
     // update range spinboxes in quiz panel
@@ -1578,26 +1593,24 @@ int MainForm::findComboIndex(const QComboBox *combo, const QString &text)
 void MainForm::setupDbaseDialogCombo(bool includeCurrent, bool selCurrent)
 {
 	dbaseDialogUI_.dbaseCombo->clear();
-	if (!curDbase_) return;
-	QString curname = curDbase_->name();
+    if (backend_->databaseState() == DB_NULL) {
+        QLOGX("Current database is null, exiting!");
+        return;
+    }
+	const auto curDbName = backend_->database()->name();
 	// iterate over items in top-level database combo box
-	for (int i = 0; i < ui_.databaseCombo->count(); ++i)
-	{
+	for (int i = 0; i < ui_.databaseCombo->count(); ++i) {
 		QString name = ui_.databaseCombo->itemText(i);
 		// don't add current database name if flag set, otherwise add all
-		if (includeCurrent || name != curname)
+		if (includeCurrent || name != curDbName)
 			dbaseDialogUI_.dbaseCombo->addItem(name);
 	}
 
 	// if flag set, point combo box to current database, otherwise remove selection
-	if (includeCurrent && selCurrent)
-	{
-		dbaseDialogUI_.dbaseCombo->setCurrentIndex(ui_.databaseCombo->currentIndex());
-	}
+	if (includeCurrent && selCurrent) 
+        dbaseDialogUI_.dbaseCombo->setCurrentIndex(ui_.databaseCombo->currentIndex());
 	else
-	{
 		dbaseDialogUI_.dbaseCombo->setCurrentIndex(0);
-	}
 }
 
 QList<int> MainForm::getSelectedDbaseTableIdxs() {
@@ -1736,89 +1749,21 @@ void MainForm::copyToAnotherDatabase(const bool move)
     }
 }
 
-void MainForm::popDbaseMissing() {
-    QMessageBox::information(this, 
-                             tr("No database"), 
-                             tr("No user database exists. You must first create one\nto be able to add items to it."));    
-}
-
-void MainForm::popDbaseLocked()
-{
-    QMessageBox::information(this, 
-                             tr("Database locked"), 
-                             tr("The current database is being used and cannot be altered right now."));
-}
-
-void MainForm::addToDatabase(const QString &item, const QString &desc)
-{
-    QLOG("Received database candidate, item: " << item << ", desc: " << desc);
-
-    // fill add dialog's combo box with currently existing databases
-    setupDbaseDialogCombo(true, true);
-    dbaseDialogUI_.entryEdit->setText(item);
-    dbaseDialogUI_.descEdit->setText(desc);
-    dbaseDialogUI_.dbaseCombo->setEnabled(true);
-    dbaseDialog_->setWindowTitle("Add item to database");
-
-    QLOG("Showing dialog for adding entry to database (current: " << curDbase_->name() << ")" );
-
-    // pop dialog and block waiting for answer, continue if OK pressed
-    if (dbaseDialog_->exec() != QDialog::Accepted) {
-        QLOG("Dialog was canceled!");
-        return;
-    }
-
-    // retrieve input from dialog (entry, description, selected database)
-    const QString
-            userItem  = dbaseDialogUI_.entryEdit->text().simplified(),
-            userDesc  = dbaseDialogUI_.descEdit->text().simplified(),
-            comboText = dbaseDialogUI_.dbaseCombo->currentText();
-
-    // guard against empty input on line edits
-    if (userItem.isEmpty() || userDesc.isEmpty())
-    {
-        QMessageBox::warning(this, "Error", "Entry and Description fields may not be empty!");
-        return;
-    }
-
-    Database *dbase = database(comboText);
-    if (dbase == nullptr) {
-        QLOG("Could not find handle to database!");
-        return;
-    }
-
-    QLOG("Adding entry to database '" << dbase->name() << "' (combo: " << comboText
-        << "), item: '" << userItem << "', description: '" << userDesc << "'" );
-
-    auto error = dbase->add(userItem, userDesc);
-
-    if (error == Error::DUPLI)
-    {
-        // todo: could be duplicate of multiple items, show all of them in the dialog
-        int dupidx = error.index();
-        const Entry &dupEntry = dbase->entry(dupidx);
-        const auto button = QMessageBox::question(this, tr("Possible duplicate"),
-            tr("A similar entry was found to already exist in the database:\n'")
-            + dupEntry.item() + "' / '" + dupEntry.description() + "' (" + QString::number(dupidx + 1)
-            + tr(").\nWhile trying to add entry:\n'") + userItem + "' / '" + userDesc
-            + tr("'\nDo you want to add it anyway?"), QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-
-        if (button == QMessageBox::Yes)
-        {
-            QLOG("User wants to add anyway");
-            error = dbase->add(userItem, userDesc, {}, true);
-            QLOG("Result: " << QString::number(error.type()));
-            // todo handle nested error
-            if (error != Error::OK) {
-                QLOG("Unable to add to database even with duplicates ignored?! (" << error.msg() << ")");
-                return;
-            }
-        }
-        else
-        {
-            QLOG("User doesn't want duplicate");
-            return;
-        }
+void MainForm::popDbaseDialog(const db::State type) {
+    switch (type) {
+    case DB_NULL:
+        QLOG("Database pointer invalid, aborting");
+        QMessageBox::information(this, 
+                                 tr("No database"), 
+                                 tr("No user database exists. You must first create one\nto be able to add items to it."));
+        break;
+    case DB_LOCK:
+        QLOG("Database locked, aborting");
+        QMessageBox::information(this, 
+                                 tr("Database locked"), 
+                                 tr("The current database is being used and cannot be altered right now."));
+        break;
+    default: break;
     }
 }
 

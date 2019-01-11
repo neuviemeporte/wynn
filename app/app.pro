@@ -1,4 +1,4 @@
 TEMPLATE = subdirs
-SUBDIRS = desktop db plugins
+SUBDIRS = desktop db logic plugins
 
-desktop.depends = db
+desktop.depends = db logic

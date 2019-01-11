@@ -5,32 +5,21 @@
 #include "ui_dbase_entry.h"
 #include "ui_quiz.h"
 #include "db/common.h"
+#include "db/error.h"
+#include "backend.h"
 
 #include <QMainWindow>
 #include <QSortFilterProxyModel>
+#include <QDialog>
+#include <QModelIndex>
 
-class Word;
-class HanCharacter;
-class QProgressBar;
-
-class QLabel;
 class QDialog;
-class QToolButton;
 class QModelIndex;
-class QMouseEvent;
-class QFont;
 class QPluginLoader;
-
 class DictionaryModel;
 class DictionaryPlugin;
 
 namespace wynn {
-
-namespace db {
-class Database;
-class Model;
-class Quiz;
-}
 
 namespace app {
 class SetupThread;
@@ -43,6 +32,8 @@ class MainForm : public QMainWindow
 private:
     static const QString VERSION, APPDIR, SETT_EXTDIR, SETT_NODUPS, SETT_CURDB;
 
+    Backend *backend_;
+    // TODO: make into smart pointers, move ui header includes to cpp
     Ui::MainFormClass ui_;
     Ui::DbaseEntryDialog dbaseDialogUI_;
     Ui::QuizDialog quizDialogUI_;
@@ -52,10 +43,6 @@ private:
     QList<QPluginLoader*> pluginLoaders_;
     DictionaryPlugin *curPlugin_;
 
-    QList<db::Database*> databases_;
-    db::Database *curDbase_;
-    db::Model *dbaseModel_;
-    QSortFilterProxyModel dbaseProxyModel_;
     QString dbaseFindText_, firstDbase_, extDir_;
 
     DictionaryModel *dictModel_;
@@ -63,20 +50,17 @@ private:
     bool preventDuplicates_;
 
     SetupThread *setupThread_;
-    db::Quiz *quiz_;
 
 public:
-	MainForm(QWidget *parent = nullptr);
+	MainForm(Backend *backend);
 	~MainForm();
 
 	Ui::MainFormClass& ui() { return ui_; }
 
+    // TODO: move plugins to backend as well
 	int pluginCount() const { return plugins_.size(); }
 	DictionaryPlugin* plugin(const int index) { return plugins_.at(index); }
 	QPluginLoader* pluginLoader(const int index) { return pluginLoaders_.at(index); }
-
-    db::Database* database(const QString &name) const;
-    void addDatabase(db::Database *dbase);
 
 signals:
 	void dictColumnResized(int curPlugIdx, int colIdx, int oldSize, int newSize);
@@ -93,6 +77,7 @@ public slots:
 	void slot_dict_langAboutClicked();
 	void slot_dict_detailsClicked();
 	void slot_dict_toDbaseClicked();
+    void slot_dict_toDbaseAccepted();
 	void slot_dict_searchStart();
 	void slot_dict_searchDone();
 	void slot_dict_tableItemActivated(const QModelIndex &index);
@@ -154,8 +139,7 @@ protected:
     void setupDbaseDialogCombo(bool includeCurrent, bool selCurrent);
 	QList<int> getSelectedDbaseTableIdxs();
 	void copyToAnotherDatabase(const bool move);
-    void popDbaseMissing();
-	void popDbaseLocked();
+    void popDbaseDialog(const db::State state);
     void addToDatabase(const QString &item, const QString &desc);
 
 	void setQuizControlsEnabled(bool arg);

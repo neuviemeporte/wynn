@@ -19,7 +19,7 @@ protected:
     QuizDirection curType_;
 
 public:
-    Model(QObject *parent = 0);
+    Model(QObject *parent = nullptr);
     ~Model() {}
 
 	int rowCount(const QModelIndex &parent = QModelIndex()) const;

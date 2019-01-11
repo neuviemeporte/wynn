@@ -7,6 +7,12 @@
 namespace wynn {
 namespace db {
 
+enum State {
+    DB_NORM,
+    DB_NULL,
+    DB_LOCK
+};
+
 class Error
 {
 public:
