@@ -81,6 +81,8 @@ int Database::findDuplicate(const Entry &entry, int exceptIdx) const {
 
 Error Database::add(const QString &item, const QString &desc, const QUuid &uuid, const bool dupIgnore) {
     QLOGX("Attempting to add entry, item: '" << item << "', desc: '" << desc << "'");
+    if (locked()) return Error::LOCK;
+
     if (item.isEmpty() || desc.isEmpty()) {
         QLOG("Bad arguments for operation");
         return Error::ARGS;
@@ -106,6 +108,8 @@ Error Database::add(const QString &item, const QString &desc, const QUuid &uuid,
 
 Error Database::remove(int idx) {
     QLOGX("Attempting to remove entry, idx = " << idx);
+    if (locked()) return Error::LOCK;
+
     if (idx < 0 || idx >= entryCount()) {
         QLOG("Index out of range!");
         return { Error::ARGS, "Index out of range", idx };
@@ -124,6 +128,8 @@ Error Database::remove(int idx) {
 Error Database::remove(const QList<int> &idxs)
 {
     QLOGX("Removing " << idxs.count() << " items");
+    if (locked()) return Error::LOCK;
+
     // TODO: ensure index list is sorted, otherwise strange things will happen. Start with a test of course.
     for (int i = idxs.size() - 1; i >= 0; --i) {
         int idx = idxs.at(i);
@@ -139,6 +145,7 @@ Error Database::remove(const QList<int> &idxs)
 
 Error Database::alter(int idx, const QString &item, const QString &desc, bool dupIgnore) {
     QLOGX("Attempting to alter entry, idx = " << idx << ", item: '" << item << "', desc: '" << desc << "'");
+    if (locked()) return Error::LOCK;
     
     // obtain original entry, copy to updated entry and set the new item and description text on that one
     const Entry &original = entry(idx);
@@ -164,6 +171,8 @@ Error Database::alter(int idx, const QString &item, const QString &desc, bool du
 
 Error Database::point(const int idx, const QuizDirection type) {
     QLOGX("Attempting to add a point for index " << idx << ", type: " << type);
+    if (locked()) return Error::LOCK;
+
     if (type != DIR_SHOWDESC && type != DIR_SHOWITEM) {
         QLOG("Invalid args for operation");
         return { Error::ARGS, "bad args for point add" };
@@ -184,6 +193,8 @@ Error Database::point(const int idx, const QuizDirection type) {
 
 Error Database::fail(const int idx, const QuizDirection type) {
     QLOGX("Attempting to add a fail for idx " << idx << ", type: " << type);
+    if (locked()) return Error::LOCK;
+
     // check if args are correct
     if (type != DIR_SHOWDESC && type != DIR_SHOWITEM) {
         QLOG("Invalid args for operation");
@@ -204,12 +215,10 @@ Error Database::fail(const int idx, const QuizDirection type) {
 }
 
 Error Database::reset() {
-    if (locked_) { 
-        QLOGX("Database locked"); 
-        return Error::LOCK;
-    }
+    if (locked()) return Error::LOCK;
     
-    for (auto &entry : entries_) {
+    for (auto &entry : entries_)
+    {
         entry.reset();
         entry.update(created_);
     }

@@ -136,10 +136,11 @@ protected:
 	void reloadDbaseCombo(const bool restoreSelection);
 	int findComboIndex(const QComboBox *combo, const QString &text);
 
-    void setupDbaseDialogCombo(bool includeCurrent, bool selCurrent);
+    bool setupDbaseDialogCombo(bool includeCurrent, bool selCurrent);
 	QList<int> getSelectedDbaseTableIdxs();
 	void copyToAnotherDatabase(const bool move);
-    void popDbaseDialog(const db::State state);
+    void popDbaseNullDialog();
+    void popDbaseLockedDialog();
     void addToDatabase(const QString &item, const QString &desc);
 
 	void setQuizControlsEnabled(bool arg);

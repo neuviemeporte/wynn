@@ -59,12 +59,44 @@ void Backend::switchDatabase(const QString &name)
     curDbase_ = database(name);
 }
 
-Error Backend::addToDatabase(const QString &dbName, const QString &item, const QString &desc, const bool dupIgnore)
+bool Backend::addToDatabase(const QString &dbName, const QString &item, const QString &desc, const bool dupIgnore)
 {
-    auto db = database(dbName);
-    if (!db)
-        return E
-    return db->add(item, desc, {}, dupIgnore);
+    QLOG("Adding entry to database '" << dbName << "', item: '" << item << "', description: '" << desc << "'" );
+
+    auto dbase = database(dbName);
+    auto error = dbase->add(userItem, userDesc);
+
+    if (error == Error::DUPLI)
+    {
+        // TODO: could be duplicate of multiple items, show all of them in the dialog
+        int dupidx = error.index();
+        const Entry &dupEntry = dbase->entry(dupidx);
+        const auto button = QMessageBox::question(this, tr("Possible duplicate"),
+            tr("A similar entry was found to already exist in the database:\n"
+               "'%1' / '%2' (%3).\n"
+               "While trying to add entry:\n"
+               "'%4' / '%5'\n"
+               "Do you want to add it anyway?").arg(dupEntry.item()).arg(dupEntry.description()).arg(dupidx + 1).arg(item).arg(desc),
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+
+        if (button == QMessageBox::Yes)
+        {
+            QLOG("User wants to add anyway");
+            error = dbase->add(userItem, userDesc, {}, true);
+            QLOG("Result: " << QString::number(error.type()));
+            // todo handle nested error
+            if (error != Error::OK)
+            {
+                QLOG("Unable to add to database even with duplicates ignored?! (" << error.msg() << ")");
+                return;
+            }
+        }
+        else
+        {
+            QLOG("User doesn't want duplicate");
+            return;
+        }
+    }
 }
 
 } //namespace app 
