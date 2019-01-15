@@ -1,12 +1,5 @@
 #pragma once
 
-#include <QChar>
-#include <QString>
-#include <QStringList>
-#include <QList>
-#include <QVector>
-#include <QFile>
-#include <QThread>
 #include <QAbstractTableModel>
 
 class DictionaryPlugin;

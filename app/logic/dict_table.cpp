@@ -1,7 +1,6 @@
-#include "global.h"
 #include "dict_table.h"
 #include "dict_plugin.h"
-#include "ixplog_active.h"
+#include "ixplog_inactive.h"
 
 #include <QChar>
 #include <QString>

@@ -6,7 +6,7 @@
 #include "ui_quiz.h"
 #include "db/common.h"
 #include "db/error.h"
-#include "backend.h"
+#include "ext_backend.h"
 
 #include <QMainWindow>
 #include <QSortFilterProxyModel>
@@ -32,35 +32,24 @@ class MainForm : public QMainWindow
 private:
     static const QString VERSION, APPDIR, SETT_EXTDIR, SETT_NODUPS, SETT_CURDB;
 
-    Backend *backend_;
+    ExtBackend *backend_;
     // TODO: make into smart pointers, move ui header includes to cpp
     Ui::MainFormClass ui_;
     Ui::DbaseEntryDialog dbaseDialogUI_;
     Ui::QuizDialog quizDialogUI_;
 
-    // TODO: change to vector everywhere
-    QList<DictionaryPlugin*> plugins_;
-    QList<QPluginLoader*> pluginLoaders_;
-    DictionaryPlugin *curPlugin_;
-
     QString dbaseFindText_, firstDbase_, extDir_;
 
-    DictionaryModel *dictModel_;
     QDialog *dbaseDialog_, *quizDialog_;
     bool preventDuplicates_;
 
     SetupThread *setupThread_;
 
 public:
-	MainForm(Backend *backend);
+	MainForm(ExtBackend *backend);
 	~MainForm();
 
 	Ui::MainFormClass& ui() { return ui_; }
-
-    // TODO: move plugins to backend as well
-	int pluginCount() const { return plugins_.size(); }
-	DictionaryPlugin* plugin(const int index) { return plugins_.at(index); }
-	QPluginLoader* pluginLoader(const int index) { return pluginLoaders_.at(index); }
 
 signals:
 	void dictColumnResized(int curPlugIdx, int colIdx, int oldSize, int newSize);
@@ -71,6 +60,9 @@ public slots:
 	void slot_manageButtonClicked();
 	void slot_settingsButtonClicked();
 	void slot_aboutButtonClicked();
+    
+    void slot_backendInfo(const QString& title, const QString& msg);
+    void slot_dbaseEnter(const QString& item, const QString& desc);
 
 	// dictionary panel
 	void slot_dict_switchPlugin(int plugIdx);

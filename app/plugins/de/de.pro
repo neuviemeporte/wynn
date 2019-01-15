@@ -12,7 +12,9 @@ LIBS += -lixplog -lixpdict
 
 FORMS = details.ui panel.ui
 
-HEADERS += de_plugin_global.h de_plugin.h
+HEADERS += $$PLUGINS/dict_plugin.h \
+    de_plugin_global.h \
+    de_plugin.h 
 
 SOURCES += de_plugin.cpp
 

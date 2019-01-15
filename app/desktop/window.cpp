@@ -30,7 +30,6 @@
 #include "backend.h"
 #include "setup.h"
 #include "dict_table.h"
-#include "dict_plugin.h"
 #include "db/model.h"
 #include "ixplog_active.h"
 
@@ -68,11 +67,9 @@ const int MSG_TIMEOUT = 2000;
 // ============================== MainForm: public
 // ==============================================================================================
 
-MainForm::MainForm(Backend *backend) : QMainWindow(nullptr),
+MainForm::MainForm(ExtBackend *backend) : QMainWindow(nullptr),
     backend_(backend),
-    curPlugin_(nullptr),
     dbaseFindText_(""),
-    dictModel_(nullptr),
     dbaseDialog_(nullptr), 
     quizDialog_(nullptr),
     setupThread_(nullptr)
@@ -115,7 +112,7 @@ MainForm::MainForm(Backend *backend) : QMainWindow(nullptr),
 	QLOG("Setting up database entry dialog");
 	dbaseDialog_ = new QDialog(this);
 	dbaseDialogUI_.setupUi(dbaseDialog_);
-    connect(dbaseDialog_, SIGNAL(accepted()), this, SLOT(slot_dict_toDbaseAccepted()));
+    connect(dbaseDialog_, SIGNAL(accepted()), backend_, SLOT(addToDatabase()));
 
 	QLOG("Setting up quiz dialog");
 	quizDialog_ = new QDialog(this);
@@ -141,9 +138,11 @@ MainForm::MainForm(Backend *backend) : QMainWindow(nullptr),
 	// dictionary page signals
 	QHeaderView *dictTableHeader = ui_.dictionaryTable->horizontalHeader();
 	connect(ui_.langCombo,          SIGNAL(currentIndexChanged(int)),      this, SLOT(slot_dict_switchPlugin(int)));
-	connect(ui_.langAboutButton,    SIGNAL(clicked()),                     this, SLOT(slot_dict_langAboutClicked()));
-	connect(ui_.dictDetailsButton,  SIGNAL(clicked()),                     this, SLOT(slot_dict_detailsClicked()));
-	connect(ui_.dictDatabaseButton, SIGNAL(clicked()),                     this, SLOT(slot_dict_toDbaseClicked()));
+	connect(ui_.langAboutButton,    SIGNAL(clicked()),                     backend_, SLOT(pluginAbout()));
+	connect(ui_.dictDetailsButton,  SIGNAL(clicked()),                     backend_, SLOT(dictDetails()));
+    connect(backend_, SIGNAL(information(const QString&, const QString&)), this, SLOT(slot_backendInfo(const QString&, const QString&)));
+	connect(ui_.dictDatabaseButton, SIGNAL(clicked()),                     backend_, SLOT(dictStore()));
+    connect(backend_, SIGNAL(dbaseEnter(const QString&, const QString&)), this, SLOT(slot_dbaseEnter()));
 	connect(ui_.dictionaryTable,    SIGNAL(activated(QModelIndex)),        this, SLOT(slot_dict_tableItemActivated(QModelIndex)));
 	connect(dictTableHeader,        SIGNAL(sectionResized(int, int, int)), this, SLOT(slot_dict_columnResized(int, int, int)));
 
@@ -185,24 +184,10 @@ MainForm::~MainForm()
 
 	saveSettings();
 
-    // don't need to delete things like the dialogs which are created as children of the main window;
-    // they will be destroyed automatically.
-	delete dictModel_;
 
 	// Need to remove all dictionary widgets from the dictionary panel manually before destroying plugins,
 	// because plugins are supposed to dispose of these widgets themselves.
 	clearPluginStacks(false);
-
-	// Don't need to delete plugins manually here, they will be destroyed automatically when the application terminates.
-	for (int i = 0; i < pluginCount(); ++i)	{
-		QPluginLoader *loader = pluginLoader(i);
-		DictionaryPlugin *plug = qobject_cast<DictionaryPlugin*>(loader->instance());
-		Q_ASSERT(plug);
-		QLOG("Retrieved loader for plugin " << i << ": '" << plug->name() << "'");
-		bool ok = loader->unload();
-		QLOG("Unload OK: " << ok << ", destroying loader");
-		delete loader;
-	}
 
 	delete APP_LOGSTREAM;
 }
@@ -235,7 +220,12 @@ void MainForm::slot_settingsButtonClicked()
 void MainForm::slot_aboutButtonClicked()
 {
 	QLOGX("Switching to info panel");
-	ui_.stackedWidget->setCurrentIndex(3);
+    ui_.stackedWidget->setCurrentIndex(3);
+}
+
+void MainForm::slot_backendInfo(const QString &title, const QString &msg)
+{
+    QMessageBox::information(this, title, msg);    
 }
 
 // ==============================================================================================
@@ -246,13 +236,11 @@ void MainForm::slot_dict_switchPlugin(int plugIdx)
 {
 	QLOGX("Dictionary language changed to: " << plugIdx);
 
-	if (curPlugin_) curPlugin_->deactivate();
-	curPlugin_ = plugin(plugIdx);
-	Q_ASSERT(curPlugin_);
-	QLOG("Current plugin: " << curPlugin_->name());
-	const int stackIndex = curPlugin_->index();
-	Q_ASSERT(stackIndex == plugIdx);
-	Q_ASSERT(stackIndex >= 0 && stackIndex < ui_.dictPanelStack->count());
+	// block the dictColumnResized signal from the main widget that is emitted after the model is changed,
+	// don't want to overwrite the correct column widths in the plugin with a stupid value
+	QHeaderView *header = ui_.dictionaryTable->horizontalHeader();
+	header->blockSignals(true);
+    backend_->pluginChanged(plugIdx);
 
 	QStackedWidget *stack = ui_.dictPanelStack;
 	// set the size policy of the page being hidden to ignored so it doesn't influence the size
@@ -263,8 +251,7 @@ void MainForm::slot_dict_switchPlugin(int plugIdx)
 		curWidget->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
 	}
 
-	QLOG("Switching dictionary widget to index " << stackIndex);
-	stack->setCurrentIndex(stackIndex);
+	stack->setCurrentIndex(plugIdx);
 
 	// set the size policy of the page that just became visible to make the widget adjust its size to it
 	curWidget = stack->currentWidget();
@@ -272,55 +259,12 @@ void MainForm::slot_dict_switchPlugin(int plugIdx)
 	curWidget->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
 	stack->adjustSize();
 
-	// block the dictColumnResized signal from the main widget that is emitted after the model is changed,
-	// don't want to overwrite the correct column widths in the plugin with a stupid value
-	QHeaderView *header = ui_.dictionaryTable->horizontalHeader();
-	header->blockSignals(true);
-	// todo: clear old results from plugins at switch
-	dictModel_->setSource(curPlugin_);
 	header->blockSignals(false);
-	curPlugin_->activate();
 }
 
-void MainForm::slot_dict_langAboutClicked()
+// backend provided candidate to enter to database
+void MainForm::slot_dbaseEnter(const QString& item, const QString& desc)
 {
-	QLOGX("Plugin about button clicked");
-	Q_ASSERT(curPlugin_);
-    QMessageBox::information(this, curPlugin_->name(), curPlugin_->description());
-}
-
-void MainForm::slot_dict_detailsClicked()
-{
-	QLOGX("Showing dictionary search result item details");
-
-	QModelIndex idx = ui_.dictionaryTable->currentIndex();
-	QLOG("Table row: " << idx.row());
-	if (idx.row() >= 0) curPlugin_->showResultDetails(idx.row());
-}
-
-// button clicked in a details dialog or the dictionary results table to add current dictionary
-// search result entry to a database (selectable)
-void MainForm::slot_dict_toDbaseClicked()
-{
-	QLOGX("Dictionary to database button clicked");
-	// get currently selected row in table
-	QModelIndex index = ui_.dictionaryTable->currentIndex();
-	// return if nothing selected in table
-    if (!index.isValid())
-    {
-		QLOG("Noting selected in table, aborting");
-		return; 
-	}
-
-    // extract item/desc data from current plugin
-	QStringList data = curPlugin_->getResultForDatabase(index.row());
-    if (data.size() != 2)
-    {
-		QLOG("Invalid data from plugin");
-		return;
-	}
-
-    const QString &item = data.first(), &desc = data.last();
     QLOG("Received database candidate, item: " << item << ", desc: " << desc);
 
     // pop dialog asking letting user edit the item before adding to database

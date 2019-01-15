@@ -31,7 +31,7 @@ public:
 	// Status of plugin. This is checked after load by the main application. Return false if plugin failed to initialize (e.g. unable to load dictionary).
 	virtual bool ok() const { return ok_; }
 	// The plugin's index. This is the index under which the application stores this plugin.
-	virtual int index() const { return index_; }
+	virtual int index() const { return index_; }    
 	// The application calls this for all plugins which are still ok() after postSetup() has been called. 
 	virtual void setIndex(const int pluginIndex) { index_ = pluginIndex; }
 	// The UI of the dictionary panel for this language. Ownership is not passed, the plugin should dispose of it when destroyed.
@@ -91,8 +91,6 @@ public:
 	// When the currently selected plugin changes in the Dictionary panel, the application calls this for the plugin that has
 	// been switched away from. Reimplement if you need to react to this event.
 	virtual void deactivate() {}
-
-
 };
 
 Q_DECLARE_INTERFACE(DictionaryPlugin, "wynn.DictionaryPlugin")

@@ -13,12 +13,7 @@ class QSortFilterProxyModel;
 namespace wynn {
 namespace app {
 
-// Ideas:
-// 1. Make backend methods return custom Error type registered with Qt which contains the args of the failed operation. Ugly, meaningless arg1, arg2... Not even sure if QML will be able to parse it. Also, would need synchronous slot execution in QML, don't know if that's possible.
-// 2. Emit backendError() signal on fail, but where to put args for retry?
-// 3. Extract args from UI, but what if they changed in the meantime? Messy.
-// 4. Create properties for all input args in the backend, bind them to UI values (performance?)
-
+// Basic backend without dictionary capabilities, just manages vocabulary databases
 class Backend : public QObject
 {
     Q_OBJECT
@@ -28,6 +23,12 @@ class Backend : public QObject
     db::Model *dbaseModel_;
     QSortFilterProxyModel *dbaseProxyModel_;
     db::Quiz *quiz_;
+    
+    // properties bound to UI controls
+    Q_PROPERTY(QString dbaseEnterName MEMBER dbaseEnterName_)
+    Q_PROPERTY(QString dbaseEnterItem MEMBER dbaseEnterItem_)
+    Q_PROPERTY(QString dbaseEnterDesc MEMBER dbaseEnterDesc_)
+    QString dbaseEnterName_, dbaseEnterItem_, dbaseEnterDesc_;    
     
 public:
     enum Error
@@ -41,10 +42,13 @@ public:
     
     void addDatabase(db::Database *dbase);
     void switchDatabase(const QString &name);
-    bool addToDatabase(const QString &dbName, const QString& item, const QString &desc, const bool dupIgnore = false);
+    void addToDatabase(bool ignoreDuplicates = false);
 
 signals:
-    void backendError(const Error type, const QString &msg);
+    void information(const QString &name, const QString &desc);
+    void error(const Error type, const QString &msg);
+    void dbaseEnter(const QString &item, const QString &desc);
+    void dbaseDuplicate();
     
 protected:
     db::Database* database(const QString &name) const;

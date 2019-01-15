@@ -59,14 +59,19 @@ void Backend::switchDatabase(const QString &name)
     curDbase_ = database(name);
 }
 
-bool Backend::addToDatabase(const QString &dbName, const QString &item, const QString &desc, const bool dupIgnore)
+void Backend::addToDatabase(bool ignoreDuplicates)
 {
-    QLOG("Adding entry to database '" << dbName << "', item: '" << item << "', description: '" << desc << "'" );
+    QLOG("Adding entry to database '" << dbaseEnterName_ << "', item: '" << dbaseEnterItem_ << "', description: '" << dbaseEnterDesc_ << "'" );
 
-    auto dbase = database(dbName);
-    auto error = dbase->add(userItem, userDesc);
+    auto dbase = database(dbaseEnterName_);
+    if (!dbase) 
+    {
+        QLOG("Database handle is null!");
+        return;
+    }
+    auto error = dbase->add(dbaseEnterItem_, dbaseEnterDesc_, {}, ignoreDuplicates);
 
-    if (error == Error::DUPLI)
+    if (error == db::Error::DUPLI)
     {
         // TODO: could be duplicate of multiple items, show all of them in the dialog
         int dupidx = error.index();
@@ -96,6 +101,10 @@ bool Backend::addToDatabase(const QString &dbName, const QString &item, const QS
             QLOG("User doesn't want duplicate");
             return;
         }
+    }
+    else if (error != db::Error::OK) 
+    {
+        QLOG("Unexpected error: " << error);
     }
 }
 
