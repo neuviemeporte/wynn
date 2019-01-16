@@ -108,6 +108,7 @@ MainForm::MainForm(ExtBackend *backend) : QMainWindow(nullptr),
 
 	// clear up any mock-up content of plugin panels, destroying contents
 	clearPluginStacks(true);
+    
 
 	QLOG("Setting up database entry dialog");
 	dbaseDialog_ = new QDialog(this);
@@ -125,6 +126,13 @@ MainForm::MainForm(ExtBackend *backend) : QMainWindow(nullptr),
     connect(quizDialogUI_.closeButton,     SIGNAL(clicked()), this, SLOT(slot_quiz_closeClicked()));
 
 	QLOG("Connecting signals");
+    // Backend signals
+    connect(backend_, SIGNAL(information(const QString&, const QString&)), this, SLOT(slot_backendInfo(const QString&, const QString&)));
+    connect(backend_, SIGNAL(dbaseEnter(const QString&, const QString&)), this, SLOT(slot_dbase_enter()));
+    connect(backend_, SIGNAL(dbaseDuplicate(const QString&, const QString&)), this, SLOT(slot_dbase_duplicate()));
+    connect(backend_, SIGNAL(dictResults()), this, SLOT(slot_dict_results()));
+    
+    
 	// Main stack widget page changing buttons
 	connect(ui_.dictionaryButton, SIGNAL(clicked()),                           this, SLOT(slot_dictionaryButtonClicked()));
 	connect(ui_.manageButton,     SIGNAL(clicked()),                           this, SLOT(slot_manageButtonClicked()));
@@ -138,11 +146,9 @@ MainForm::MainForm(ExtBackend *backend) : QMainWindow(nullptr),
 	// dictionary page signals
 	QHeaderView *dictTableHeader = ui_.dictionaryTable->horizontalHeader();
 	connect(ui_.langCombo,          SIGNAL(currentIndexChanged(int)),      this, SLOT(slot_dict_switchPlugin(int)));
-	connect(ui_.langAboutButton,    SIGNAL(clicked()),                     backend_, SLOT(pluginAbout()));
-	connect(ui_.dictDetailsButton,  SIGNAL(clicked()),                     backend_, SLOT(dictDetails()));
-    connect(backend_, SIGNAL(information(const QString&, const QString&)), this, SLOT(slot_backendInfo(const QString&, const QString&)));
-	connect(ui_.dictDatabaseButton, SIGNAL(clicked()),                     backend_, SLOT(dictStore()));
-    connect(backend_, SIGNAL(dbaseEnter(const QString&, const QString&)), this, SLOT(slot_dbaseEnter()));
+    connect(ui_.langAboutButton,    SIGNAL(clicked()),                     this, SLOT(slot_dict_langAboutClicked()));
+    connect(ui_.dictDetailsButton,  SIGNAL(clicked()),                     this, SLOT(slot_dict_detailsClicked()));
+    connect(ui_.dictDatabaseButton, SIGNAL(clicked()),                     this, SLOT(slot_dict_toDbaseClicked()));
 	connect(ui_.dictionaryTable,    SIGNAL(activated(QModelIndex)),        this, SLOT(slot_dict_tableItemActivated(QModelIndex)));
 	connect(dictTableHeader,        SIGNAL(sectionResized(int, int, int)), this, SLOT(slot_dict_columnResized(int, int, int)));
 
@@ -228,6 +234,11 @@ void MainForm::slot_backendInfo(const QString &title, const QString &msg)
     QMessageBox::information(this, title, msg);    
 }
 
+void MainForm::slot_backendWarning(const QString &title, const QString &msg)
+{
+    QMessageBox::warning(this, title, msg);
+}
+
 // ==============================================================================================
 // ============================== MainForm: public slots - dictionary panel
 // ==============================================================================================
@@ -259,11 +270,26 @@ void MainForm::slot_dict_switchPlugin(int plugIdx)
 	curWidget->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
 	stack->adjustSize();
 
-	header->blockSignals(false);
+    header->blockSignals(false);
+}
+
+void MainForm::slot_dict_langAboutClicked()
+{
+    backend_->pluginAbout();
+}
+
+void MainForm::slot_dict_detailsClicked()
+{
+    backend_->dictDetails();
+}
+
+void MainForm::slot_dict_toDbaseClicked()
+{
+    backend_->dictStore();
 }
 
 // backend provided candidate to enter to database
-void MainForm::slot_dbaseEnter(const QString& item, const QString& desc)
+void MainForm::slot_dbase_enter(const QString& item, const QString& desc)
 {
     QLOG("Received database candidate, item: " << item << ", desc: " << desc);
 
@@ -285,66 +311,44 @@ void MainForm::slot_dbaseEnter(const QString& item, const QString& desc)
     dbaseDialog_->open();
 }
 
-void MainForm::slot_dict_toDbaseAccepted()
+void MainForm::slot_dbase_duplicate(const QString &title, const QString &msg)
 {
-    // retrieve input from dialog (entry, description, selected database)
-    const QString
-            userItem  = dbaseDialogUI_.entryEdit->text().simplified(),
-            userDesc  = dbaseDialogUI_.descEdit->text().simplified(),
-            dbName    = dbaseDialogUI_.dbaseCombo->currentText();
-
-    // guard against empty input on line edits
-    if (userItem.isEmpty() || userDesc.isEmpty())
+    const auto button = QMessageBox::question(this, title, msg, QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (button == QMessageBox::Yes)
     {
-        QMessageBox::warning(this, "Error", "Entry and Description fields may not be empty!");
-        return;
+        QLOG("User wants to add anyway");
+        backend_->addToDatabase(true);
     }
-
-    Database *dbase = database(dbName);
-    if (dbase == nullptr) 
+    else
     {
-        QLOG("Could not find handle to database!");
+        QLOG("User doesn't want duplicate");
         return;
-    }
-
-    backend_->addToDatabase(dbName, userItem, userDesc);
+    }    
 }
 
-void MainForm::slot_dict_searchStart()
+void MainForm::slot_dbase_accepted()
 {
-	QLOGX("Search start");
-	dictModel_->beginReset();
+    backend_->addToDatabase();
 }
 
-void MainForm::slot_dict_searchDone()
+void MainForm::slot_dict_results()
 {
-	QLOGX("Search done");
-	dictModel_->endReset();
     // when results present, shift keyboard focus to results table
-    if ( dictModel_->rowCount(QModelIndex()) ) {
-        ui_.dictionaryTable->selectRow(0);
-        ui_.dictionaryTable->setFocus(Qt::OtherFocusReason);
-    }
+    ui_.dictionaryTable->selectRow(0);
+    ui_.dictionaryTable->setFocus(Qt::OtherFocusReason);
 }
 
 void MainForm::slot_dict_tableItemActivated(const QModelIndex &index)
 {
 	QLOGX("Table item activated, row: " << index.row());
-	QLOGINC;
-
-	Q_ASSERT(curPlugin_ && index.row() >= 0);
-	curPlugin_->showResultDetails(index.row());
-
-	QLOGDEC;
+    backend_->dictDetails();
 }
 
 void MainForm::slot_dict_columnResized(int index, int oldSize, int newSize)
 {
 	const int plugIdx = curPlugin_->index();
 	QLOGX("Column " << index << " was resized from " << oldSize << " to " << newSize << ", current plugin: " << plugIdx);
-	QLOGINC;
 	emit dictColumnResized(plugIdx, index, oldSize, newSize);
-	QLOGDEC;
 }
 
 void MainForm::slot_dict_resizeColumns(const QList<int> &widths)

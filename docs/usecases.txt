@@ -1,0 +1,26 @@
+WYNN-1: dictionary plugin changed
+1. Selection changes in combobox, calls MainForm::slot_dict_switchPlugin(int plugIdx), switches UI stack
+2. Backend::pluginChanged(idx) called, resets dict table model, deactivates old and activates new plugin
+
+WYNN-2: plugin info requested
+1. "About" button clicked in UI with plugin active, calls MainForm::slot_dict_langAboutClicked()
+2. Call to Backend::pluginAbout(), sends signal information(name, desc)
+3. MainForm::backendInfo() -> QMessageBox::information
+
+WYNN-3: dictionary result details requested
+1. "Details" button clicked on dictionary result, calls MainForm::slot_dict_detailsClicked()
+2. Call Backend::dictDetails(), executes Plugin::showResultDetails() [!]
+
+WYNN-4: store dictionary result in database
+1. "Store" button clicked in UI on dictionary result, calls MainForm::slot_dict_toDbaseClicked()
+2. Call Backend::dictStore(), extracts data from dictionary model and emits dbaseEnter(item, desc)
+3. Calls MainForm::dbaseEnter(), fills and opens dbase add entry dialog
+4. User clicks ok on dialog, accepted() signal bound to MainForm::slot_dict_toDbaseAccepted()
+5. Calls Backend::addToDbase() [dialog text and combo selection bound to properties in backend]
+6a. empty input: warning() signal emitted from backend
+6b. duplicate found: 
+
+WYNN-5: dictionary search results table gains keyboard focus when results present after search
+
+WYNN-6: activate item in dictionary search results table. Effect same as WYNN-3
+

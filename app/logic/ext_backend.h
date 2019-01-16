@@ -32,15 +32,16 @@ public slots:
     void pluginAbout();
     void dictDetails();
     void dictStore();
+    void dictSearchStart();
+    void dictSearchDone();
     
 signals:
-    
+    void dictResults();
     
 protected:
 	int pluginCount() const { return plugins_.size(); }
 	DictionaryPlugin* plugin(const int index) { return plugins_.at(index); }
 	QPluginLoader* pluginLoader(const int index) { return pluginLoaders_.at(index); }
-    
 };
 
 } //namespace app

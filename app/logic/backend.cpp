@@ -24,19 +24,6 @@ Backend::~Backend()
         delete db;
 }
 
-State Backend::databaseState() const 
-{
-    if (database() == nullptr) return DB_NULL;
-    else if (database()->locked()) return DB_LOCK;
-    else return DB_NORM;
-}
-
-QString Backend::databaseName() const
-{
-    if (curDbase_) return curDbase_->name();
-    else return {};
-}
-
 Database* Backend::database(const QString &name) const 
 {
     if ( name.isEmpty() ) return nullptr;
@@ -61,50 +48,44 @@ void Backend::switchDatabase(const QString &name)
 
 void Backend::addToDatabase(bool ignoreDuplicates)
 {
-    QLOG("Adding entry to database '" << dbaseEnterName_ << "', item: '" << dbaseEnterItem_ << "', description: '" << dbaseEnterDesc_ << "'" );
+    const QString
+            userItem  = dbaseEnterItem_.simplified(),
+            userDesc  = dbaseEnterDesc_.simplified();
+    
+    // guard against empty input on line edits
+    if (userItem.isEmpty() || userDesc.isEmpty())
+    {
+        emit warning(tr("Error"), tr("Entry and Description fields may not be empty!"));
+        return;
+    }
 
+    QLOG("Adding entry to database '" << dbaseEnterName_ << "', item: '" << userItem << "', description: '" << userDesc << "'" );
     auto dbase = database(dbaseEnterName_);
     if (!dbase) 
     {
         QLOG("Database handle is null!");
         return;
     }
-    auto error = dbase->add(dbaseEnterItem_, dbaseEnterDesc_, {}, ignoreDuplicates);
-
+    
+    auto error = dbase->add(userItem, userDesc, {}, ignoreDuplicates);
     if (error == db::Error::DUPLI)
     {
         // TODO: could be duplicate of multiple items, show all of them in the dialog
         int dupidx = error.index();
         const Entry &dupEntry = dbase->entry(dupidx);
-        const auto button = QMessageBox::question(this, tr("Possible duplicate"),
-            tr("A similar entry was found to already exist in the database:\n"
+        // TODO: move all strings to UI?
+        const QString msg = tr("A similar entry was found to already exist in the database:\n"
                "'%1' / '%2' (%3).\n"
                "While trying to add entry:\n"
                "'%4' / '%5'\n"
-               "Do you want to add it anyway?").arg(dupEntry.item()).arg(dupEntry.description()).arg(dupidx + 1).arg(item).arg(desc),
-                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-
-        if (button == QMessageBox::Yes)
-        {
-            QLOG("User wants to add anyway");
-            error = dbase->add(userItem, userDesc, {}, true);
-            QLOG("Result: " << QString::number(error.type()));
-            // todo handle nested error
-            if (error != Error::OK)
-            {
-                QLOG("Unable to add to database even with duplicates ignored?! (" << error.msg() << ")");
-                return;
-            }
-        }
-        else
-        {
-            QLOG("User doesn't want duplicate");
-            return;
-        }
+               "Do you want to add it anyway?").arg(dupEntry.item()).arg(dupEntry.description()).arg(dupidx + 1).arg(userItem).arg(userDesc);
+        
+        emit dbaseDuplicate(tr("Possible duplicate"), msg);
     }
     else if (error != db::Error::OK) 
     {
         QLOG("Unexpected error: " << error);
+        // TODO: handle
     }
 }
 

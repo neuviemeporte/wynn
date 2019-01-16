@@ -83,5 +83,19 @@ void ExtBackend::dictStore()
     emit dbaseEnter(data.first(), data.last());
 }
 
+void ExtBackend::dictSearchStart()
+{
+    QLOGX("Search start");
+	dictModel_->beginReset();    
+}
+
+void ExtBackend::dictSearchDone()
+{
+    QLOGX("Search done");
+	dictModel_->endReset();
+    if ( dictModel_->rowCount(QModelIndex()) ) 
+        emit dictResults();
+}
+
 } //namespace app
 } //namespace wynn

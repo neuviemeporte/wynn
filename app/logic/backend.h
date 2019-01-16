@@ -30,6 +30,9 @@ class Backend : public QObject
     Q_PROPERTY(QString dbaseEnterDesc MEMBER dbaseEnterDesc_)
     QString dbaseEnterName_, dbaseEnterItem_, dbaseEnterDesc_;    
     
+protected:
+    db::Database* database(const QString &name) const;
+    
 public:
     enum Error
     {
@@ -45,13 +48,10 @@ public:
     void addToDatabase(bool ignoreDuplicates = false);
 
 signals:
-    void information(const QString &name, const QString &desc);
-    void error(const Error type, const QString &msg);
+    void information(const QString &title, const QString &msg);
+    void warning(const QString &title, const QString &msg);
     void dbaseEnter(const QString &item, const QString &desc);
-    void dbaseDuplicate();
-    
-protected:
-    db::Database* database(const QString &name) const;
+    void dbaseDuplicate(const QString &title, const QString &msg);    
 };
 
 } // namespace app
