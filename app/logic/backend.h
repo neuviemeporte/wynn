@@ -32,8 +32,15 @@ class Backend : public QObject
     QString dbaseEnterName_, dbaseEnterItem_, dbaseEnterDesc_;    
     
 protected:
+    enum Notification
+    {
+        DBASE_NULL,
+        DBASE_LOCKED
+    };
+
     db::Database* database(const QString &name) const;
     QString dbasePath(const db::Database *db) const;
+    void notify(const Notification type);
     
 public:
     Backend();
@@ -52,11 +59,12 @@ signals:
     void error(const QString &title, const QString &msg);
     void status(const QString msg);
     
-    void dbaseEnter(const QString &item, const QString &desc);
+    void dbaseEnterNew(const QString &item = {}, const QString &desc = {});
     void dbaseDuplicate(const QString &title, const QString &msg);
     void dbaseItemCount(const int itemCount);
     void dbaseAdded(const QString &name);
     void dbaseRemoved(const QString &name);
+    void dbaseEntryAdded(int entryCount);
 };
 
 } // namespace app

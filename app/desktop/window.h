@@ -63,7 +63,7 @@ public slots:
     
     void slot_backendInfo(const QString& title, const QString& msg);
     void slot_backendWarning(const QString& title, const QString& msg);
-    void slot_dbase_enter(const QString& item, const QString& desc);
+    void slot_dbase_enterNew(const QString& item, const QString& desc);
     void slot_dbase_duplicate(const QString& title, const QString& msg);
 
 	// dictionary panel
@@ -71,7 +71,8 @@ public slots:
 	void slot_dict_langAboutClicked();
 	void slot_dict_detailsClicked();
 	void slot_dict_toDbaseClicked();
-    void slot_dbase_accepted();
+    void slot_dbase_entryAccepted();
+    void slot_dbase_entryAdded(int entryCount);
 	void slot_dict_searchStart();
 	void slot_dict_results();
 	void slot_dict_tableItemActivated(const QModelIndex &index);

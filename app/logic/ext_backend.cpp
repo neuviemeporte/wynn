@@ -80,7 +80,7 @@ void ExtBackend::dictStore()
 		return;
 	}
 
-    emit dbaseEnter(data.first(), data.last());
+    emit dbaseEnterNew(data.first(), data.last());
 }
 
 void ExtBackend::dictSearchStart()

@@ -103,6 +103,7 @@ MainForm::MainForm(ExtBackend *backend) : QMainWindow(nullptr),
 	clearPluginStacks(true);
     
 
+    // TODO: simplify connection calls with functor-based connections
 	QLOG("Setting up database entry dialog");
 	dbaseDialog_ = new QDialog(this);
 	dbaseDialogUI_.setupUi(dbaseDialog_);
@@ -121,12 +122,13 @@ MainForm::MainForm(ExtBackend *backend) : QMainWindow(nullptr),
 	QLOG("Connecting signals");
     // Backend signals
     connect(backend_, SIGNAL(information(const QString&, const QString&)), this, SLOT(slot_backendInfo(const QString&, const QString&)));
-    connect(backend_, SIGNAL(dbaseEnter(const QString&, const QString&)), this, SLOT(slot_dbase_enter()));
+    connect(backend_, SIGNAL(dbaseEnter(const QString&, const QString&)), this, SLOT(slot_dbase_enterNew()));
     connect(backend_, SIGNAL(dbaseDuplicate(const QString&, const QString&)), this, SLOT(slot_dbase_duplicate()));
     connect(backend_, SIGNAL(dictResults()), this, SLOT(slot_dict_results()));
     connect(backend_, SIGNAL(dbaseItemCount(const int)), this, SLOT(slot_database_countUpdate(const int)));
     connect(backend_, SIGNAL(dbaseAdded(const QString &)), this, SLOT(slot_database_added(const QString&)));
     connect(backend_, SIGNAL(dbaseRemoved(const QString&)), this, SLOT(slot_database_removed(const QString&)));
+    connect(backend_, SIGNAL(dbaseEntryAdded(const int)), this, SLOT(slot_dbase_entryAdded(const int)));
     
 	// Main stack widget page changing buttons
 	connect(ui_.dictionaryButton, SIGNAL(clicked()),                           this, SLOT(slot_dictionaryButtonClicked()));
@@ -281,49 +283,6 @@ void MainForm::slot_dict_detailsClicked()
 void MainForm::slot_dict_toDbaseClicked()
 {
     backend_->dictStore();
-}
-
-// backend provided candidate to enter to database
-void MainForm::slot_dbase_enter(const QString& item, const QString& desc)
-{
-    QLOG("Received database candidate, item: " << item << ", desc: " << desc);
-
-    // pop dialog asking letting user edit the item before adding to database
-    // fill add dialog's combo box with currently existing databases
-    if ( !setupDbaseDialogCombo( true, true ) )
-    {
-        popDbaseNullDialog();
-        return;
-    }
-    dbaseDialogUI_.entryEdit->setText(item);
-    dbaseDialogUI_.descEdit->setText(desc);
-    dbaseDialogUI_.dbaseCombo->setEnabled(true);
-    dbaseDialog_->setWindowTitle(tr("Add item to database"));
-
-    QLOG("Showing dialog for adding entry to database (current: " << ui_.databaseCombo->currentText() << ")" );
-
-    // show dialog for user to accept the operation
-    dbaseDialog_->open();
-}
-
-void MainForm::slot_dbase_duplicate(const QString &title, const QString &msg)
-{
-    const auto button = QMessageBox::question(this, title, msg, QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-    if (button == QMessageBox::Yes)
-    {
-        QLOG("User wants to add anyway");
-        backend_->enterToDatabase(true);
-    }
-    else
-    {
-        QLOG("User doesn't want duplicate");
-        return;
-    }    
-}
-
-void MainForm::slot_dbase_accepted()
-{
-    backend_->enterToDatabase();
 }
 
 void MainForm::slot_dict_results()
@@ -492,70 +451,59 @@ void MainForm::slot_database_removed(const QString &name)
 void MainForm::slot_database_addToClicked() 
 {
     QLOG("Database Add button clicked");
-	if ( !curDbase_ ) {
-        popDbaseMissing();
-		return;
-	}
-    
-	if ( curDbase_->locked() )  { 
-        popDbaseLocked(); 
-        return; 
-    }
-    
-	// setup database entry dialog, point to current database in combobox
-	setupDbaseDialogCombo(true, true);
-	dbaseDialogUI_.dbaseCombo->setEnabled(false);
-	dbaseDialogUI_.entryEdit->clear();
-	dbaseDialogUI_.descEdit->clear();
-	dbaseDialogUI_.entryEdit->setEnabled(true);
-	dbaseDialogUI_.entryEdit->setFocus(Qt::OtherFocusReason);
-	dbaseDialogUI_.descEdit->setEnabled(true);
-	dbaseDialog_->setWindowTitle(tr("Add item to current database"));
-    
-	// pop dialog and block, continue if accepted
-    if ( dbaseDialog_->exec() != QDialog::Accepted ) {
-        QLOG("User declined entry add dialog");
+    backend_->addToDatabase();
+}
+
+void MainForm::slot_dbase_enterNew(const QString& item, const QString& desc)
+{
+    QLOG("Received database candidate, item: " << item << ", desc: " << desc);
+
+    // pop dialog asking letting user edit the item before adding to database
+    // fill add dialog's combo box with currently existing databases
+    if ( !setupDbaseDialogCombo( true, true ) )
+    {
+        popDbaseNullDialog();
         return;
     }
-        
-    QString entry = dbaseDialogUI_.entryEdit->text().simplified();
-    QString desc = dbaseDialogUI_.descEdit->text().simplified();
-    Database *dbase = curDbase_;
-    
-    // empty input doesn't make sense
-    if (entry.isEmpty() || desc.isEmpty()) {
-        QMessageBox::information(this, tr("Missing input"), tr("Database items can't be empty!"));
-        QLOG("Missing data in user input, done");
+    dbaseDialogUI_.entryEdit->setText(item);
+    dbaseDialogUI_.entryEdit->setEnabled(true);
+    dbaseDialogUI_.descEdit->setText(desc);
+    dbaseDialogUI_.descEdit->setEnabled(true);
+    // TODO: let user select which dbase to add to? or hide the combobox altogether
+    dbaseDialogUI_.dbaseCombo->setEnabled(false);
+    dbaseDialogUI_.entryEdit->setFocus(Qt::OtherFocusReason);
+    dbaseDialog_->setWindowTitle(tr("Add item to database"));
+
+    QLOG("Showing dialog for adding entry to database (current: " << ui_.databaseCombo->currentText() << ")" );
+
+    // show dialog for user to accept the operation
+    dbaseDialog_->open();
+}
+
+void MainForm::slot_dbase_entryAccepted()
+{
+    backend_->enterToDatabase();
+}
+
+void MainForm::slot_dbase_entryAdded(int entryCount)
+{
+    ui_.databaseTable->setFocus(Qt::OtherFocusReason);
+    ui_.databaseTable->selectRow(entryCount);
+    slot_database_countUpdate(entryCount);
+}
+
+void MainForm::slot_dbase_duplicate(const QString &title, const QString &msg)
+{
+    const auto button = QMessageBox::question(this, title, msg, QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (button == QMessageBox::Yes)
+    {
+        QLOG("User wants to add anyway");
+        backend_->enterToDatabase(true);
+    }
+    else
+    {
+        QLOG("User doesn't want duplicate");
         return;
-    }
-    
-    QLOG("Adding entry to database '" << dbase->name() << ", text: '" << entry << "', description: '" << desc << "'" );
-    Error error = dbase->add(entry, desc);
-    
-    if (error == Error::DUPLI) { 
-        int dupidx = error.index();
-        const Entry &dupEntry = dbase->entry(dupidx);
-        const auto button = QMessageBox::question(this, tr("Possible duplicate"), 
-            tr("A similar entry was found to already exist in the database:\n'") 
-            + dupEntry.item() + "' / '" + dupEntry.description() + "' (" + QString::number(dupidx + 1) 
-            + tr(").\nWhile trying to add entry:\n'") + entry + "' / '" + desc 
-            + tr("'\nDo you want to add it anyway?"), QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-        
-        if ( button == QMessageBox::Yes ) {
-            QLOG("User wants to add anyway");
-            error = dbase->add(entry, desc, {}, true);
-            QLOG("Result: " << QString::number(error.type()));
-        }
-        else {
-            QLOG("User doesn't want duplicate");
-            return;
-        }
-    }
-    
-    if ( error == Error::OK ) {
-        ui_.databaseTable->setFocus(Qt::OtherFocusReason);
-        ui_.databaseTable->selectRow(curDbase_->entryCount()-1);
-        slot_database_countUpdate();
     }
 }
 
@@ -1636,22 +1584,6 @@ void MainForm::copyToAnotherDatabase(const bool move)
         curDbase_->remove(moveIdxs);
         slot_database_countUpdate();
     }
-}
-
-void MainForm::popDbaseNullDialog()
-{
-    QLOG("Database pointer invalid, aborting");
-    QMessageBox::information(this,
-        tr("No database"),
-        tr("No user database exists. You must first create one\nto be able to add items to it."));
-}
-
-void MainForm::popDbaseLockedDialog()
-{
-    QLOG("Database locked, aborting");
-    QMessageBox::information(this,
-        tr("Database locked"),
-        tr("The current database is being used and cannot be altered right now."));
 }
 
 void MainForm::setQuizControlsEnabled(bool arg)

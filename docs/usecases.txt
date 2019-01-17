@@ -13,12 +13,14 @@ WYNN-3: dictionary result details requested
 
 WYNN-4: store dictionary result in database
 1. "Store" button clicked in UI on dictionary result, calls MainForm::slot_dict_toDbaseClicked()
-2. Call Backend::dictStore(), extracts data from dictionary model and emits dbaseEnter(item, desc)
-3. Calls MainForm::slot_dbase_enter(), fills and opens dbase add entry dialog
-4. User clicks ok on dialog, accepted() signal bound to MainForm::slot_dict_toDbaseAccepted()
-5. Calls Backend::addToDbase() [dialog text and combo selection bound to properties in backend]
+2. Call Backend::dictStore(), extracts data from dictionary model and emits dbaseEnterNew(item, desc)
+3. Calls MainForm::slot_dbase_enterNew(), fills and opens dbase add entry dialog
+4. User clicks ok on dialog, accepted() signal bound to MainForm::slot_dbase_entryAccepted()
+5. Calls Backend::enterToDatabase() [dialog text and combo selection bound to properties in backend]
 6a. empty input: warning() signal emitted from backend
-6b. duplicate found: 
+6b. duplicate found: dbaseDuplicate(title, msg) emitted from backend
+    1. call slot_dbase_duplicate(), pop dialog for user to accept or rejected
+    2. user clicks ok, call Backend::enterToDatabase(true) to ignore duplicates, go to 5 again
 
 WYNN-5: dictionary search results table gains keyboard focus when results present after search
 
@@ -48,3 +50,8 @@ WYNN-11: database remove
 2. calls backend::deleteDatabase(), removes database from list and destroy object, emits dbaseRemoved(name)
 3. connected to MainForm::slot_database_removed(name), remove item in combobox
 4. should trigger database change (perhaps to null) as in WYNN-9
+
+WYNN-12: add new entry to database
+1. user clicks add button in dbase panel, calls slot MainForm::slot_database_addToClicked()
+2. Call Backend::addToDbase(), emits dbaseEnterNew("", "");
+3. Continue from WYNN-3.3

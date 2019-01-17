@@ -13,7 +13,7 @@ const QString
 	APPDIR      = QDir::homePath() + "/.wynn",
 	SETT_EXTDIR = "extdir", 
 	SETT_NODUPS = "nodbdups", 
-	SETT_CURDB  = "curdb";
+    SETT_CURDB  = "curdb";
 
 } // namespace
 
@@ -50,6 +50,22 @@ QString Backend::dbasePath(const Database *db) const
 {
     if (!db) return {};
     return APPDIR + QDir::separator() + db->name() + Database::XML_EXT;
+}
+
+void Backend::notify(const Backend::Notification type)
+{
+    switch (type)
+    {
+    case DBASE_NULL:
+        emit information(tr("No database"),
+                         tr("No user database exists. You must first create one\nto be able to add items to it."));
+        break;
+    case DBASE_LOCKED:
+        emit information(tr("Database locked"),
+                         tr("The current database is being used and cannot be altered right now."));
+        break;
+    default: break;
+    }
 }
 
 void Backend::addDatabase(const QString &name) 
@@ -127,16 +143,18 @@ void Backend::switchDatabase(const QString &name)
 
 void Backend::addToDatabase()
 {
-	if ( !curDbase_ ) 
+    if ( !curDbase_ )
     {
-        popDbaseMissing();
+        notify(DBASE_NULL);
 		return;
 	}
-    
-	if ( curDbase_->locked() )  { 
-        popDbaseLocked(); 
+    else if ( curDbase_->locked() )
+    {
+        notify(DBASE_LOCKED);
         return; 
-    })
+    }
+
+    emit dbaseEnterNew();
 }
 
 void Backend::enterToDatabase(bool ignoreDuplicates)
@@ -179,7 +197,10 @@ void Backend::enterToDatabase(bool ignoreDuplicates)
     {
         QLOG("Unexpected error: " << error);
         // TODO: handle
+        return;
     }
+
+    emit dbaseEntryAdded(dbase->entryCount());
 }
 
 } //namespace app 
