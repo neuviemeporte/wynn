@@ -97,5 +97,17 @@ void ExtBackend::dictSearchDone()
         emit dictResults();
 }
 
+void ExtBackend::dictColumnResize(const int col, const int oldSize, const int newSize)
+{
+	QLOGX("Column " << index << " was resized from " << oldSize << " to " << newSize << ", current plugin: " << plugIdx);
+    if (!curPlugin_) 
+    {
+        QLOG("Current plugin handle is null!");
+        return;
+    }
+    
+	curPlugin_->
+}
+
 } //namespace app
 } //namespace wynn

@@ -14,7 +14,7 @@ WYNN-3: dictionary result details requested
 WYNN-4: store dictionary result in database
 1. "Store" button clicked in UI on dictionary result, calls MainForm::slot_dict_toDbaseClicked()
 2. Call Backend::dictStore(), extracts data from dictionary model and emits dbaseEnter(item, desc)
-3. Calls MainForm::dbaseEnter(), fills and opens dbase add entry dialog
+3. Calls MainForm::slot_dbase_enter(), fills and opens dbase add entry dialog
 4. User clicks ok on dialog, accepted() signal bound to MainForm::slot_dict_toDbaseAccepted()
 5. Calls Backend::addToDbase() [dialog text and combo selection bound to properties in backend]
 6a. empty input: warning() signal emitted from backend
@@ -24,3 +24,27 @@ WYNN-5: dictionary search results table gains keyboard focus when results presen
 
 WYNN-6: activate item in dictionary search results table. Effect same as WYNN-3
 
+WYNN-7: dictionary table column resize: adapt column width to table contents, no scrollbars
+
+WYNN-8: change current database
+1. selection in toolbar combo changes (either from changing the selection or deleting the current database), calls MainForm::slot_database_changeCurrent()
+2a. Last database removed, dbase panel ui elements become inactive, table becomes empty, finished
+2b. calls Backend::switchDatabase(name), changes model source, dbase table contents change
+3. spinbox limits are updated in the quiz panel
+
+WYNN-9: database create
+1. user clicks database add button, MainForm::slot_database_createClicked() is called
+2. empty or non-alphanum name is rejected
+3. call Backend::adDatabase(name), emits countUpdate(0)
+4. new dbase name added to combobox in UI, becomes current
+
+WYNN-10: database save
+1. user clicks save button in UI, connected to MainForm::slot_database_saveClicked()
+2. call Backend->saveDatabase(), contents saved to $HOME/.wynn in xml file
+3. signal status() sent from backend, connected to slot_statusMessage(), shows info in statusbar
+
+WYNN-11: database remove
+1. user clicks delete button in UI, connected to MainForm::slot_database_deleteClicked()
+2. calls backend::deleteDatabase(), removes database from list and destroy object, emits dbaseRemoved(name)
+3. connected to MainForm::slot_database_removed(name), remove item in combobox
+4. should trigger database change (perhaps to null) as in WYNN-9

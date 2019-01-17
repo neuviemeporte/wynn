@@ -41,13 +41,6 @@ using namespace wynn::db;
 namespace wynn {
 namespace app {
 
-const QString 
-    MainForm::VERSION     = "0.9.6",
-	MainForm::APPDIR      = QDir::homePath() + "/.wynn",
-	MainForm::SETT_EXTDIR = "extdir", 
-	MainForm::SETT_NODUPS = "nodbdups", 
-	MainForm::SETT_CURDB  = "curdb";
-
 namespace {
 const QString PLUG_WILDCARD = "wynnplugin-*";
 #if defined(__linux__)
@@ -131,7 +124,9 @@ MainForm::MainForm(ExtBackend *backend) : QMainWindow(nullptr),
     connect(backend_, SIGNAL(dbaseEnter(const QString&, const QString&)), this, SLOT(slot_dbase_enter()));
     connect(backend_, SIGNAL(dbaseDuplicate(const QString&, const QString&)), this, SLOT(slot_dbase_duplicate()));
     connect(backend_, SIGNAL(dictResults()), this, SLOT(slot_dict_results()));
-    
+    connect(backend_, SIGNAL(dbaseItemCount(const int)), this, SLOT(slot_database_countUpdate(const int)));
+    connect(backend_, SIGNAL(dbaseAdded(const QString &)), this, SLOT(slot_database_added(const QString&)));
+    connect(backend_, SIGNAL(dbaseRemoved(const QString&)), this, SLOT(slot_database_removed(const QString&)));
     
 	// Main stack widget page changing buttons
 	connect(ui_.dictionaryButton, SIGNAL(clicked()),                           this, SLOT(slot_dictionaryButtonClicked()));
@@ -317,7 +312,7 @@ void MainForm::slot_dbase_duplicate(const QString &title, const QString &msg)
     if (button == QMessageBox::Yes)
     {
         QLOG("User wants to add anyway");
-        backend_->addToDatabase(true);
+        backend_->enterToDatabase(true);
     }
     else
     {
@@ -328,7 +323,7 @@ void MainForm::slot_dbase_duplicate(const QString &title, const QString &msg)
 
 void MainForm::slot_dbase_accepted()
 {
-    backend_->addToDatabase();
+    backend_->enterToDatabase();
 }
 
 void MainForm::slot_dict_results()
@@ -346,16 +341,14 @@ void MainForm::slot_dict_tableItemActivated(const QModelIndex &index)
 
 void MainForm::slot_dict_columnResized(int index, int oldSize, int newSize)
 {
-	const int plugIdx = curPlugin_->index();
-	QLOGX("Column " << index << " was resized from " << oldSize << " to " << newSize << ", current plugin: " << plugIdx);
-	emit dictColumnResized(plugIdx, index, oldSize, newSize);
+	QLOGX("Column " << index << " was resized from " << oldSize << " to " << newSize);
+	// TODO: cleanup processing for this in plugins, come up with something better on UI side
 }
 
+// TODO: remove if not necessary anymore
 void MainForm::slot_dict_resizeColumns(const QList<int> &widths)
 {
 	QLOGX("Requested column resize on " << widths.size() << " columns");
-	QLOGINC;
-
 	QHeaderView *header = ui_.dictionaryTable->horizontalHeader();
 	// prevent header from sending notifications about these resizes
 	header->blockSignals(true);
@@ -382,8 +375,6 @@ void MainForm::slot_dict_resizeColumns(const QList<int> &widths)
 	}
 
 	header->blockSignals(false);
-
-	QLOGDEC;
 }
 
 // ==============================================================================================
@@ -405,94 +396,101 @@ void MainForm::slot_database_changeCurrent(const QString& text)
     }
             
     backend_->switchDatabase(text);
-    // in case the selection became empty (last database removed),
-    // set current dbase handle to null and disconnect signals from model to database
-	dbaseModel_->setDatabase(curDbase_);
+}
+
+void MainForm::slot_database_countUpdate(const int count)
+{
+	QLOG("Updating database item count");
+    const int max = count;
+    const int min = (max > 0 ? 1 : 0);
+    QLOG("Determined min = " << min << ", max = " << max);
     
-    // update range spinboxes in quiz panel
-	dbaseCountUpdate();
+	// update range spinboxes in quiz panel
+	ui_.quizRangeFromSpin->setMinimum(min);
+	ui_.quizRangeFromSpin->setMaximum(max);
+	ui_.quizRangeToSpin->setMinimum(min);
+	ui_.quizRangeToSpin->setMaximum(max);
+	ui_.quizTakeSpin->setMinimum(min);
+	ui_.quizTakeSpin->setMaximum(max);
 }
 
 void MainForm::slot_database_createClicked()
 {
-	bool ok;
+	bool accepted = false;
 	QRegExp nameRegex("[a-zA-Z0-9_-]+");
-	QString name = QInputDialog::getText(this, "Create database", "Enter name for new database:",
-		QLineEdit::Normal, "", &ok);
+	const QString name = QInputDialog::getText(this, tr("Create database"), tr("Enter name for new database:"),
+		QLineEdit::Normal, "", &accepted);
 
+	if (!accepted || name.isEmpty()) return;
+    
 	// discriminate against ill-formed database names
-	if (ok && !name.isEmpty())
-	{
-		if (!nameRegex.exactMatch(name))
-		{
-			QMessageBox::warning(this, 	"Invalid name", 
-				"database name may contain only alphanumeric, dash ('-') and underscore ('_') characters.", 
-				QMessageBox::Ok, QMessageBox::Ok);
-			return;
-		}
-		QLOG("Creating database, name: '" << name << "'" );
-		// create new database, update structures
-		Database *dbase = new Database(this, name);
-		databases_.append(dbase);
-		ui_.databaseCombo->addItem(name);
-		ui_.databaseCombo->setCurrentIndex(ui_.databaseCombo->count() - 1);
-		ui_.databaseCombo->setEnabled(true);
-		//ui_.databaseCombo->adjustSize();
-    }
-}
-
-void MainForm::slot_database_saveClicked() {
-    QLOG("Database save button clicked");
-    if (!curDbase_ ) {
-        QLOGX("Current database is null!");
+    if (!nameRegex.exactMatch(name))
+    {
+        QMessageBox::warning(this, 	tr("Invalid name"), 
+            tr("Database name may contain only alphanumeric, dash ('-') and underscore ('_') characters."), 
+            QMessageBox::Ok, QMessageBox::Ok);
         return;
     }
     
-    auto path = dbaseSavePath(curDbase_);
-    curDbase_->saveXML(path);
-    const auto msg = tr("Database saved to ") + path 
-            + " (" + QString::number(curDbase_->entryCount()) + tr(" items)");
-    statusMessage(msg, MSG_TIMEOUT);
+    QLOG("Creating database, name: '" << name << "'" );
+    backend_->addDatabase(name);
+}
+
+void MainForm::slot_database_added(const QString &name)
+{
+    slot_database_countUpdate(0);
+    ui_.databaseCombo->addItem(name);
+    ui_.databaseCombo->setCurrentText(name);
+    ui_.databaseCombo->setEnabled(true);
+}
+
+void MainForm::slot_database_saveClicked() 
+{
+    QLOG("Database save button clicked");
+    backend_->saveDatabase();
 }
 
 void MainForm::slot_database_deleteClicked()
 {
     QLOG("Database delete button clicked");
-	Database *dbase = curDbase_;
-	if (!dbase) {
-        QLOGX("Current database is nullptr!");
+    const QString dbName = ui_.databaseCombo->currentText();
+	if (dbName.isEmpty()) {
+        QLOGX("No current database!");
         return;
     }
 
-	if (QMessageBox::question(this, "Question", 
-            tr("Are you sure you want to delete the database '") + dbase->name() + "'?", 
+	if (QMessageBox::question(this, "Question", tr("Are you sure you want to delete the database '%1'?").arg(dbName), 
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes) 
     {
         QLOGX("User declined database deletion");
         return;
     } 
 
-    const int idx = ui_.databaseCombo->currentIndex();
-	QLOG("Removing database, index: " << idx << ", name: " << dbase->name() << " (combo text: " << ui_.databaseCombo->currentText() << ")");
-    Q_ASSERT(ui_.databaseCombo->currentText() == dbase->name());
+	QLOG("Removing database: " << dbName);
+    backend_->deleteDatabase();
+}
 
-	const QString xmlpath = dbaseSavePath(dbase);
-	QLOG("Removing data file '" << xmlpath << "'");
-	QFile file(xmlpath);
-	if (!file.remove())	{
-		QLOG("Unable to remove file! (Error: " << file.error() << ")");
-	}
-
-    // remove item from dbase selection combobox, triggers slot_database_changeCurrent()
-	ui_.databaseCombo->removeItem(idx);
-
-    // finally, destroy database object    
-	databases_.removeAt(idx);
-    delete dbase;
+void MainForm::slot_database_removed(const QString &name)
+{
+    QLOGX("Database " << name << " was removed");
+    bool removed = false;
+    for (int i = 0; i < ui_.databaseCombo->count(); ++i) 
+    {
+        if ( ui_.databaseCombo->itemText(i) == name ) 
+        {
+            ui_.databaseCombo->removeItem(i);
+            removed = true;
+        }
+    }
+    if (!removed)
+    {
+        QLOG("Unable to find dbase in combobox!");
+    }
 }
 
 // add buton clicked in database panel
-void MainForm::slot_database_addToClicked() {
+void MainForm::slot_database_addToClicked() 
+{
     QLOG("Database Add button clicked");
 	if ( !curDbase_ ) {
         popDbaseMissing();
@@ -557,7 +555,7 @@ void MainForm::slot_database_addToClicked() {
     if ( error == Error::OK ) {
         ui_.databaseTable->setFocus(Qt::OtherFocusReason);
         ui_.databaseTable->selectRow(curDbase_->entryCount()-1);
-        dbaseCountUpdate();
+        slot_database_countUpdate();
     }
 }
 
@@ -601,7 +599,7 @@ void MainForm::slot_database_removeFromClicked()
 		// TODO:
 		//ui_.databaseTable->selectRow(Idxs.first());
 		QLOG("Entries removed");
-        dbaseCountUpdate();
+        slot_database_countUpdate();
 	}
 	else {
 		QLOG("Action cancelled");
@@ -1122,7 +1120,7 @@ void MainForm::slot_setupDone()
 }
 
 void MainForm::slot_updateSetupMsg(const QString &msg) {
-	statusMessage(msg);
+	slot_statusMessage(msg);
 }
 
 void MainForm::slot_testClicked() {
@@ -1354,34 +1352,9 @@ void MainForm::applySettings()
     QLOGDEC;
 }
 
-void MainForm::statusMessage(const QString &text, const int timeoutMs) {
-    ui_.statusBar->showMessage(text, timeoutMs);
-}
-
-void MainForm::dbaseCountUpdate()
+void MainForm::slot_statusMessage(const QString &text) 
 {
-	QLOG("Updating database item count");
-    int max = 0 , min = 0;
-    if (curDbase_) {
-        QLOG("Current database is '" << curDbase_->name() << "'");
-        max = curDbase_->entryCount();
-        if (max > 0) min = 1;
-    }
-    QLOG("Determined min = " << min << ", max = " << max);
-    
-	// update range spinboxes in quiz panel
-	ui_.quizRangeFromSpin->setMinimum(min);
-	ui_.quizRangeFromSpin->setMaximum(max);
-	ui_.quizRangeToSpin->setMinimum(min);
-	ui_.quizRangeToSpin->setMaximum(max);
-	ui_.quizTakeSpin->setMinimum(min);
-	ui_.quizTakeSpin->setMaximum(max);
-}
-
-QString MainForm::dbaseSavePath(const Database *db) const {
-    if (!db) return {};
-    
-    return (db->external() ? extDir_ : APPDIR) + QDir::separator() + db->name() + Database::XML_EXT;
+    ui_.statusBar->showMessage(text, MSG_TIMEOUT);
 }
 
 void MainForm::reloadExternalDbases(const QString &newdir)
@@ -1661,7 +1634,7 @@ void MainForm::copyToAnotherDatabase(const bool move)
     if ( move && !moveIdxs.isEmpty() ) {
         QLOG("Removing item(s) from source database");
         curDbase_->remove(moveIdxs);
-        dbaseCountUpdate();
+        slot_database_countUpdate();
     }
 }
 

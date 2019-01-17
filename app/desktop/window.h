@@ -80,9 +80,12 @@ public slots:
 
 	// database functionality
 	void slot_database_changeCurrent(const QString& text);
+    void slot_database_countUpdate(const int count);
 	void slot_database_createClicked();
+    void slot_database_added(const QString &name);
     void slot_database_saveClicked();
 	void slot_database_deleteClicked();
+    void slot_database_removed(const QString &name);
 	void slot_database_addToClicked();
 	void slot_database_removeFromClicked();
 	void slot_database_copyClicked();
@@ -108,6 +111,7 @@ public slots:
 	void slot_settings_switchPlugin(int plugIdx);
 
 	// other
+    void slot_statusMessage(const QString &text);
 	void slot_setupDone();
 	void slot_updateSetupMsg(const QString &msg);
 	void slot_testClicked();
@@ -121,9 +125,7 @@ protected:
 	void loadSettings();
 	void saveSettings();
 	void applySettings();
-    void statusMessage(const QString &text, const int timeoutMs = 0);
     
-    void dbaseCountUpdate();
     QString dbaseSavePath(const db::Database *db) const;
 
 	void reloadExternalDbases(const QString &newdir);

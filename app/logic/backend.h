@@ -7,6 +7,7 @@
 
 #include <QObject>
 #include <QList>
+#include <QString>
 
 class QSortFilterProxyModel;
 
@@ -32,26 +33,30 @@ class Backend : public QObject
     
 protected:
     db::Database* database(const QString &name) const;
+    QString dbasePath(const db::Database *db) const;
     
 public:
-    enum Error
-    {
-        ERR_DBADD_CONFLICT
-    };
-    Q_ENUM(Error)
-
     Backend();
     ~Backend();
     
-    void addDatabase(db::Database *dbase);
+    void addDatabase(const QString &name);
+    void saveDatabase();
+    void deleteDatabase();
     void switchDatabase(const QString &name);
-    void addToDatabase(bool ignoreDuplicates = false);
+    void addToDatabase();
+    void enterToDatabase(bool ignoreDuplicates = false);
 
 signals:
     void information(const QString &title, const QString &msg);
     void warning(const QString &title, const QString &msg);
+    void error(const QString &title, const QString &msg);
+    void status(const QString msg);
+    
     void dbaseEnter(const QString &item, const QString &desc);
-    void dbaseDuplicate(const QString &title, const QString &msg);    
+    void dbaseDuplicate(const QString &title, const QString &msg);
+    void dbaseItemCount(const int itemCount);
+    void dbaseAdded(const QString &name);
+    void dbaseRemoved(const QString &name);
 };
 
 } // namespace app
