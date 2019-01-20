@@ -29,7 +29,9 @@ class Backend : public QObject
     Q_PROPERTY(QString dbaseEnterName MEMBER dbaseEnterName_)
     Q_PROPERTY(QString dbaseEnterItem MEMBER dbaseEnterItem_)
     Q_PROPERTY(QString dbaseEnterDesc MEMBER dbaseEnterDesc_)
-    QString dbaseEnterName_, dbaseEnterItem_, dbaseEnterDesc_;    
+    Q_PROPERTY(QList<int> dbaseSelection MEMBER dbaseSelection_)
+    QString dbaseEnterName_, dbaseEnterItem_, dbaseEnterDesc_;
+    QList<int> dbaseSelection_;
     
 protected:
     enum Notification
@@ -41,17 +43,26 @@ protected:
     db::Database* database(const QString &name) const;
     QString dbasePath(const db::Database *db) const;
     void notify(const Notification type);
+    QList<int> getSelectedDbaseTableIdxs();
     
 public:
     Backend();
     ~Backend();
+
+    enum Operation
+    {
+        OP_INIT,
+        OP_PROCESS,
+        OP_POST
+    };
+    Q_ENUM(Operation)
     
     void addDatabase(const QString &name);
     void saveDatabase();
     void deleteDatabase();
     void switchDatabase(const QString &name);
-    void addToDatabase();
-    void enterToDatabase(bool ignoreDuplicates = false);
+    void addToDatabase(const Operation op, bool ignoreDuplicates = false);
+    void removeFromDatabase(const Operation op);
 
 signals:
     void information(const QString &title, const QString &msg);
@@ -65,6 +76,8 @@ signals:
     void dbaseAdded(const QString &name);
     void dbaseRemoved(const QString &name);
     void dbaseEntryAdded(int entryCount);
+    void dbaseRemoveFromConfirm(const QString &title, const QString &msg);
+    void dbaseEntriesRemoved(int entryCount);
 };
 
 } // namespace app

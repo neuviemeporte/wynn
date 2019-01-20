@@ -128,7 +128,9 @@ MainForm::MainForm(ExtBackend *backend) : QMainWindow(nullptr),
     connect(backend_, SIGNAL(dbaseItemCount(const int)), this, SLOT(slot_database_countUpdate(const int)));
     connect(backend_, SIGNAL(dbaseAdded(const QString &)), this, SLOT(slot_database_added(const QString&)));
     connect(backend_, SIGNAL(dbaseRemoved(const QString&)), this, SLOT(slot_database_removed(const QString&)));
-    connect(backend_, SIGNAL(dbaseEntryAdded(const int)), this, SLOT(slot_dbase_entryAdded(const int)));
+    connect(backend_, SIGNAL(dbaseEntryAdded(int)), this, SLOT(slot_dbase_entryAdded(int)));
+    connect(backend_, SIGNAL(dbaseRemoveFromConfirm(const QString&, const QString&)), this, SLOT(slot_database_removeFromConfirm(const QString&, const QString&)));
+    connect(backend_, SIGNAL(dbaseEntriesRemoved(int)), this, SLOT(slot_database_entriesRemoved(int)));
     
 	// Main stack widget page changing buttons
 	connect(ui_.dictionaryButton, SIGNAL(clicked()),                           this, SLOT(slot_dictionaryButtonClicked()));
@@ -451,7 +453,7 @@ void MainForm::slot_database_removed(const QString &name)
 void MainForm::slot_database_addToClicked() 
 {
     QLOG("Database Add button clicked");
-    backend_->addToDatabase();
+    backend_->addToDatabase(Backend::OP_INIT);
 }
 
 void MainForm::slot_dbase_enterNew(const QString& item, const QString& desc)
@@ -482,7 +484,7 @@ void MainForm::slot_dbase_enterNew(const QString& item, const QString& desc)
 
 void MainForm::slot_dbase_entryAccepted()
 {
-    backend_->enterToDatabase();
+    backend_->addToDatabase(Backend::OP_PROCESS);
 }
 
 void MainForm::slot_dbase_entryAdded(int entryCount)
@@ -498,7 +500,7 @@ void MainForm::slot_dbase_duplicate(const QString &title, const QString &msg)
     if (button == QMessageBox::Yes)
     {
         QLOG("User wants to add anyway");
-        backend_->enterToDatabase(true);
+        backend_->addToDatabase(Backend::OP_PROCESS, true);
     }
     else
     {
@@ -511,47 +513,32 @@ void MainForm::slot_dbase_duplicate(const QString &title, const QString &msg)
 void MainForm::slot_database_removeFromClicked()
 {
     QLOG("Database remove button clicked");
-    if ( !curDbase_ ) {
-        popDbaseMissing();
-		return;
-	}
-    
-	if ( curDbase_->locked() )  { 
-        popDbaseLocked(); 
-        return; 
+    backend_->removeFromDatabase(Backend::OP_INIT);
+}
+
+void MainForm::slot_database_removeFromConfirm(const QString &title, const QString &msg)
+{
+    // ask for confirmation
+    const auto button = QMessageBox::question(this, title, msg, QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+
+    // remove items
+    if (button == QMessageBox::Yes)
+    {
+        backend_->removeFromDatabase(Backend::OP_PROCESS);
     }
-    
-	// retrieve selected indexes
-	QList<int> dbIdxs = getSelectedDbaseTableIdxs();
+    else
+    {
+        QLOG("Action cancelled");
+    }
+}
 
-	// return if no selection
-	if (dbIdxs.isEmpty()) {
-		QLOG("Nothing selected, done");
-		return;
-	}
-
-	QLOG("Selected item indices (" << dbIdxs.size() << "): " << dbIdxs);
-
-	// ask for confirmation
-	const auto button = QMessageBox::question(this, 
-        tr("Remove item(s)"), 
-		tr("Are you sure you want to remove ") 
-			+ (dbIdxs.size() > 1 ? tr("these ") + QString::number(dbIdxs.size()) + tr(" items?") : tr("this item?")),
-		QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-    
-	// remove items
-	if (button == QMessageBox::Yes)	{
-		Q_ASSERT(curDbase_ != nullptr);
-        curDbase_->remove(dbIdxs);
-		ui_.databaseTable->setFocus(Qt::OtherFocusReason);
-		// TODO:
-		//ui_.databaseTable->selectRow(Idxs.first());
-		QLOG("Entries removed");
-        slot_database_countUpdate();
-	}
-	else {
-		QLOG("Action cancelled");
-	}
+void MainForm::slot_database_entriesRemoved(int count)
+{
+    QLOG("Entries removed");
+    ui_.databaseTable->setFocus(Qt::OtherFocusReason);
+    // TODO:
+    //ui_.databaseTable->selectRow(Idxs.first());
+    slot_database_countUpdate(count);
 }
 
 // copy button clicked in database panel
@@ -1448,24 +1435,6 @@ bool MainForm::setupDbaseDialogCombo(bool includeCurrent, bool selCurrent)
 		dbaseDialogUI_.dbaseCombo->setCurrentIndex(0);
 
     return dbaseDialogUI_.dbaseCombo->count() > 0;
-}
-
-QList<int> MainForm::getSelectedDbaseTableIdxs() {
-	auto allIdxs = ui_.databaseTable->selectionModel()->selectedRows();
-	QLOGX("Selected indexes in database table: " << allIdxs.count());
-
-	QList<int> rowIdxs;
-	for (const auto &idx : allIdxs)	{
-		if (idx.column() != 0) 
-            continue;
-        
-        QLOG("row: " << idx.row() << ", col: " << idx.column());
-        int dbaseidx = dbaseModel_->data( dbaseProxyModel_.mapToSource( idx ), Qt::UserRole).toInt();
-        QLOG("New dbase idx: " << dbaseidx);
-        rowIdxs.append( dbaseidx );
-	}
-
-	return rowIdxs;
 }
 
 void MainForm::copyToAnotherDatabase(const bool move)

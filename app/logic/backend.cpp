@@ -68,6 +68,23 @@ void Backend::notify(const Backend::Notification type)
     }
 }
 
+QList<int> Backend::getSelectedDbaseTableIdxs() {
+    QLOGX("Selected indexes in database table: " << allIdxs.count());
+
+    QList<int> rowIdxs;
+    for (const auto &idx : dbaseSelection_)	{
+        if (idx.column() != 0)
+            continue;
+
+        QLOG("row: " << idx.row() << ", col: " << idx.column());
+        int dbaseidx = dbaseModel_->data( dbaseProxyModel_.mapToSource( idx ), Qt::UserRole).toInt();
+        QLOG("New dbase idx: " << dbaseidx);
+        rowIdxs.append( dbaseidx );
+    }
+
+    return rowIdxs;
+}
+
 void Backend::addDatabase(const QString &name) 
 {
     if (name.isEmpty()) {
@@ -141,7 +158,7 @@ void Backend::switchDatabase(const QString &name)
     emit dbaseItemCount(entryCount);
 }
 
-void Backend::addToDatabase()
+void Backend::addToDatabase(const Operation op, bool ignoreDuplicates)
 {
     if ( !curDbase_ )
     {
@@ -154,53 +171,95 @@ void Backend::addToDatabase()
         return; 
     }
 
-    emit dbaseEnterNew();
+    if ( op == OP_INIT )
+    {
+        emit dbaseEnterNew();
+    }
+    else if ( op == OP_PROCESS )
+    {
+        const QString
+                userItem  = dbaseEnterItem_.simplified(),
+                userDesc  = dbaseEnterDesc_.simplified();
+
+        // guard against empty input on line edits
+        if (userItem.isEmpty() || userDesc.isEmpty())
+        {
+            emit warning(tr("Error"), tr("Entry and Description fields may not be empty!"));
+            return;
+        }
+
+        QLOG("Adding entry to database '" << dbaseEnterName_ << "', item: '" << userItem << "', description: '" << userDesc << "'" );
+        auto dbase = database(dbaseEnterName_);
+        if (!dbase)
+        {
+            QLOG("Database handle is null!");
+            return;
+        }
+
+        auto error = dbase->add(userItem, userDesc, {}, ignoreDuplicates);
+        if (error == db::Error::DUPLI)
+        {
+            // TODO: could be duplicate of multiple items, show all of them in the dialog
+            int dupidx = error.index();
+            const Entry &dupEntry = dbase->entry(dupidx);
+            // TODO: move all strings to UI?
+            const QString msg = tr("A similar entry was found to already exist in the database:\n"
+                   "'%1' / '%2' (%3).\n"
+                   "While trying to add entry:\n"
+                   "'%4' / '%5'\n"
+                   "Do you want to add it anyway?").arg(dupEntry.item()).arg(dupEntry.description()).arg(dupidx + 1).arg(userItem).arg(userDesc);
+
+            emit dbaseDuplicate(tr("Possible duplicate"), msg);
+        }
+        else if (error != db::Error::OK)
+        {
+            QLOG("Unexpected error: " << error);
+            // TODO: handle
+            return;
+        }
+
+        emit dbaseEntryAdded(dbase->entryCount());
+    }
 }
 
-void Backend::enterToDatabase(bool ignoreDuplicates)
+void Backend::removeFromDatabase(const Operation op)
 {
-    const QString
-            userItem  = dbaseEnterItem_.simplified(),
-            userDesc  = dbaseEnterDesc_.simplified();
-    
-    // guard against empty input on line edits
-    if (userItem.isEmpty() || userDesc.isEmpty())
+    if ( !curDbase_ )
     {
-        emit warning(tr("Error"), tr("Entry and Description fields may not be empty!"));
+        notify(DBASE_NULL);
+        return;
+    }
+    else if ( curDbase_->locked() )
+    {
+        notify(DBASE_LOCKED);
+        return;
+    }
+    // return if no selection
+    else if ( dbaseSelection_.isEmpty() )
+    {
+        QLOG("Nothing selected, done");
         return;
     }
 
-    QLOG("Adding entry to database '" << dbaseEnterName_ << "', item: '" << userItem << "', description: '" << userDesc << "'" );
-    auto dbase = database(dbaseEnterName_);
-    if (!dbase) 
+    if ( op == OP_INIT )
     {
-        QLOG("Database handle is null!");
-        return;
+        emit dbaseRemoveFromConfirm(tr("Remove item(s)"),
+                                    tr("Are you sure you want to remove %1 items?").arg(dbaseSelection_.count()));
     }
-    
-    auto error = dbase->add(userItem, userDesc, {}, ignoreDuplicates);
-    if (error == db::Error::DUPLI)
+    else if ( op == OP_PROCESS )
     {
-        // TODO: could be duplicate of multiple items, show all of them in the dialog
-        int dupidx = error.index();
-        const Entry &dupEntry = dbase->entry(dupidx);
-        // TODO: move all strings to UI?
-        const QString msg = tr("A similar entry was found to already exist in the database:\n"
-               "'%1' / '%2' (%3).\n"
-               "While trying to add entry:\n"
-               "'%4' / '%5'\n"
-               "Do you want to add it anyway?").arg(dupEntry.item()).arg(dupEntry.description()).arg(dupidx + 1).arg(userItem).arg(userDesc);
-        
-        emit dbaseDuplicate(tr("Possible duplicate"), msg);
+        QList<int> dbIdxs = getSelectedDbaseTableIdxs();
+        Q_ASSERT(curDbase_);
+        const auto error = curDbase_->remove(dbIdxs);
+        if ( error == db::Error::OK )
+        {
+            emit dbaseEntriesRemoved(curDbase_->entryCount());
+        }
+        else
+        {
+            QLOG("Unexpected error: " << error);
+        }
     }
-    else if (error != db::Error::OK) 
-    {
-        QLOG("Unexpected error: " << error);
-        // TODO: handle
-        return;
-    }
-
-    emit dbaseEntryAdded(dbase->entryCount());
 }
 
 } //namespace app 

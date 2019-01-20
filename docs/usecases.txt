@@ -16,11 +16,11 @@ WYNN-4: store dictionary result in database
 2. Call Backend::dictStore(), extracts data from dictionary model and emits dbaseEnterNew(item, desc)
 3. Calls MainForm::slot_dbase_enterNew(), fills and opens dbase add entry dialog
 4. User clicks ok on dialog, accepted() signal bound to MainForm::slot_dbase_entryAccepted()
-5. Calls Backend::enterToDatabase() [dialog text and combo selection bound to properties in backend]
+5. Calls Backend::addToDatabase(OP_PROCESS) [dialog text and combo selection bound to properties in backend]
 6a. empty input: warning() signal emitted from backend
 6b. duplicate found: dbaseDuplicate(title, msg) emitted from backend
     1. call slot_dbase_duplicate(), pop dialog for user to accept or rejected
-    2. user clicks ok, call Backend::enterToDatabase(true) to ignore duplicates, go to 5 again
+    2. user clicks ok, call Backend::addToDatabase(OP_PROCESS, true) to ignore duplicates, go to 5 again
 
 WYNN-5: dictionary search results table gains keyboard focus when results present after search
 
@@ -53,5 +53,13 @@ WYNN-11: database remove
 
 WYNN-12: add new entry to database
 1. user clicks add button in dbase panel, calls slot MainForm::slot_database_addToClicked()
-2. Call Backend::addToDbase(), emits dbaseEnterNew("", "");
-3. Continue from WYNN-3.3
+2a. No current dbase or locked - emits information(), bound to MainForm::slot_backendInfo(), returns
+2b. Call Backend::addToDbase(), emits dbaseEnterNew("", "");
+3. Continue from WYNN-4.3
+
+WYNN-13: remove entry from database
+1. user clicks delete button in dbase panel, calls slot MainForm::slot_database_removeFromClicked()
+2. Calls Backend::removeFromDatabase(Backend::OP_INIT) emits dbaseRemoveFromConfirm(title, msg)
+3. Calls MainForm::slot_database_removeFromConfirm(), pops yes/no dialog, 
+4. Calls Backend::removeFromDatabase(OP_PROCESS), performs deletion, emits dbaseEntriesRemoved(count)
+5. Calls MainForm::slot_database_entriesRemoved(), updates entry count, sets focus to dbase table

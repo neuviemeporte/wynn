@@ -89,6 +89,8 @@ public slots:
     void slot_database_removed(const QString &name);
 	void slot_database_addToClicked();
 	void slot_database_removeFromClicked();
+    void slot_database_removeFromConfirm(const QString& title, const QString& msg);
+    void slot_database_entriesRemoved(int count);
 	void slot_database_copyClicked();
 	void slot_database_moveClicked();
 	void slot_database_editClicked();
