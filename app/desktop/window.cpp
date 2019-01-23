@@ -102,12 +102,10 @@ MainForm::MainForm(ExtBackend *backend) : QMainWindow(nullptr),
 	// clear up any mock-up content of plugin panels, destroying contents
 	clearPluginStacks(true);
     
-
     // TODO: simplify connection calls with functor-based connections
 	QLOG("Setting up database entry dialog");
 	dbaseDialog_ = new QDialog(this);
 	dbaseDialogUI_.setupUi(dbaseDialog_);
-    connect(dbaseDialog_, SIGNAL(accepted()), backend_, SLOT(addToDatabase()));
 
 	QLOG("Setting up quiz dialog");
 	quizDialog_ = new QDialog(this);
@@ -131,6 +129,7 @@ MainForm::MainForm(ExtBackend *backend) : QMainWindow(nullptr),
     connect(backend_, SIGNAL(dbaseEntryAdded(int)), this, SLOT(slot_dbase_entryAdded(int)));
     connect(backend_, SIGNAL(dbaseRemoveFromConfirm(const QString&, const QString&)), this, SLOT(slot_database_removeFromConfirm(const QString&, const QString&)));
     connect(backend_, SIGNAL(dbaseEntriesRemoved(int)), this, SLOT(slot_database_entriesRemoved(int)));
+    connect(backend_, SIGNAL(dbaseCopyMoveConfirm(const QString&, const QString&, const QString &, bool )), this, SLOT());
     
 	// Main stack widget page changing buttons
 	connect(ui_.dictionaryButton, SIGNAL(clicked()),                           this, SLOT(slot_dictionaryButtonClicked()));
@@ -479,12 +478,10 @@ void MainForm::slot_dbase_enterNew(const QString& item, const QString& desc)
     QLOG("Showing dialog for adding entry to database (current: " << ui_.databaseCombo->currentText() << ")" );
 
     // show dialog for user to accept the operation
-    dbaseDialog_->open();
-}
-
-void MainForm::slot_dbase_entryAccepted()
-{
-    backend_->addToDatabase(Backend::OP_PROCESS);
+    if ( dbaseDialog_->exec() == QDialog::Accepted )
+    {
+        backend_->addToDatabase(Backend::OP_PROCESS);
+    }
 }
 
 void MainForm::slot_dbase_entryAdded(int entryCount)
@@ -513,6 +510,13 @@ void MainForm::slot_dbase_duplicate(const QString &title, const QString &msg)
 void MainForm::slot_database_removeFromClicked()
 {
     QLOG("Database remove button clicked");
+    const auto selection = ui_.databaseTable->selectionModel()->selectedRows();
+    if ( selection.empty() )
+    {
+        QLOG("Nothing selected in database table!");
+        return;
+    }
+    backend_->setDbaseSelection(selection);
     backend_->removeFromDatabase(Backend::OP_INIT);
 }
 
@@ -545,33 +549,48 @@ void MainForm::slot_database_entriesRemoved(int count)
 void MainForm::slot_database_copyClicked()
 {
     QLOG("Database copy button clicked");
-    if ( !curDbase_ ) {
-        popDbaseMissing();
-		return;
-	}
-    
-	if ( curDbase_->locked() )  { 
-        popDbaseLocked(); 
-        return; 
+    const auto selection = ui_.databaseTable->selectionModel()->selectedRows();
+    if ( selection.empty() )
+    {
+        QLOG("Nothing selected in database table!");
+        return;
     }
-    
-	copyToAnotherDatabase(false);
+    backend_->setDbaseSelection(selection);
+    backend_->copyFromDatabase(Backend::OP_INIT, false);
+}
+
+void MainForm::slot_database_copyMoveConfirm(const QString &title, const QString &item, const QString &desc, bool move)
+{
+    // setup database entry dialog: disable item/desc editing, enable database selection combobox
+	if ( !setupDbaseDialogCombo(false, false) ) 
+    {
+        QMessageBox::information(this, tr("Information"), tr("Unable to perform operation. There are no databases to copy/move to."));
+        return;
+    }
+    dbaseDialog_->setWindowTitle( title );
+	dbaseDialogUI_.dbaseCombo->setEnabled(true);
+	dbaseDialogUI_.entryEdit->setEnabled(false);
+	dbaseDialogUI_.descEdit->setEnabled(false);
+    dbaseDialogUI_.entryEdit->setText(item);
+    dbaseDialogUI_.descEdit->setText(desc);
+    if ( dbaseDialog_->exec() == QDialog::Accepted ) 
+    {
+        backend_->copyFromDatabase(Backend::OP_PROCESS, move);
+    }
 }
 
 // move button clicked in database panel
 void MainForm::slot_database_moveClicked()
 {
     QLOG("Database move button clicked");
-    if ( !curDbase_ ) {
-        popDbaseMissing();
-		return;
-	}
-    
-	if ( curDbase_->locked() )  { 
-        popDbaseLocked(); 
-        return; 
+    const auto selection = ui_.databaseTable->selectionModel()->selectedRows();
+    if ( selection.empty() )
+    {
+        QLOG("Nothing selected in database table!");
+        return;
     }
-
+    backend_->setDbaseSelection(selection);
+    backend_->copyFromDatabase(Backend::OP_INIT, true);
 	copyToAnotherDatabase(true);
 }
 
@@ -1437,7 +1456,7 @@ bool MainForm::setupDbaseDialogCombo(bool includeCurrent, bool selCurrent)
     return dbaseDialogUI_.dbaseCombo->count() > 0;
 }
 
-void MainForm::copyToAnotherDatabase(const bool move)
+void MainForm:: copyToAnotherDatabase(const bool move)
 {
     // setup database entry dialog: disable item/desc editing, enable database selection combobox
 	setupDbaseDialogCombo(false, false);

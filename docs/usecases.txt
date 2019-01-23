@@ -1,65 +1,43 @@
-WYNN-1: dictionary plugin changed
-1. Selection changes in combobox, calls MainForm::slot_dict_switchPlugin(int plugIdx), switches UI stack
-2. Backend::pluginChanged(idx) called, resets dict table model, deactivates old and activates new plugin
+WYNN_1: change current database
+1. User changes selection of current database in UI
+2. Contents of database model and UI are updated to reflect current database
 
-WYNN-2: plugin info requested
-1. "About" button clicked in UI with plugin active, calls MainForm::slot_dict_langAboutClicked()
-2. Call to Backend::pluginAbout(), sends signal information(name, desc)
-3. MainForm::backendInfo() -> QMessageBox::information
+WYNN_2: database create
+1. user clicks database add button, dialog shown to enter name
+2a. Name already taken or invalid, done
+2b. Name accepted, new database object created, made current [WYNN_1]
 
-WYNN-3: dictionary result details requested
-1. "Details" button clicked on dictionary result, calls MainForm::slot_dict_detailsClicked()
-2. Call Backend::dictDetails(), executes Plugin::showResultDetails() [!]
+WYNN_3: database save
+1. user clicks save button
+2. current database's contents saved to $HOME/.wynn in xml file
+3. info about file saved shown in status bar
 
-WYNN-4: store dictionary result in database
-1. "Store" button clicked in UI on dictionary result, calls MainForm::slot_dict_toDbaseClicked()
-2. Call Backend::dictStore(), extracts data from dictionary model and emits dbaseEnterNew(item, desc)
-3. Calls MainForm::slot_dbase_enterNew(), fills and opens dbase add entry dialog
-4. User clicks ok on dialog, accepted() signal bound to MainForm::slot_dbase_entryAccepted()
-5. Calls Backend::addToDatabase(OP_PROCESS) [dialog text and combo selection bound to properties in backend]
-6a. empty input: warning() signal emitted from backend
-6b. duplicate found: dbaseDuplicate(title, msg) emitted from backend
-    1. call slot_dbase_duplicate(), pop dialog for user to accept or rejected
-    2. user clicks ok, call Backend::addToDatabase(OP_PROCESS, true) to ignore duplicates, go to 5 again
+WYNN_4: database remove
+1. user clicks delete button
+2. current database object destroyed
+3. database .xml file deleted from $HOME/.wynn if exists
+4. current database changes [WYNN_1], selection might become empty if last dbase was removed
 
-WYNN-5: dictionary search results table gains keyboard focus when results present after search
+WYNN_5: add new entry to database
+1. user clicks add button
+2a. No current dbase or locked, show warning, done
+2b. Pop dialog to let user enter entry contents
+3. dialog accepted by user, entry added to current database
+4a. Duplicate detected in database, pop dialog to let user accept or reject entry (done)
+5. database model updated, view focused on new entry
 
-WYNN-6: activate item in dictionary search results table. Effect same as WYNN-3
+WYNN_6: remove entry from database
+1. user selects one or more items and clicks delete button
+2a. No database or locked, show warning, done
+2b. confirmation dialog popped to confirm deletion of item(s)
+3. user accepts, items are removed from current database
+4. database model and UI is updated not to show removed items
 
-WYNN-7: dictionary table column resize: adapt column width to table contents, no scrollbars
-
-WYNN-8: change current database
-1. selection in toolbar combo changes (either from changing the selection or deleting the current database), calls MainForm::slot_database_changeCurrent()
-2a. Last database removed, dbase panel ui elements become inactive, table becomes empty, finished
-2b. calls Backend::switchDatabase(name), changes model source, dbase table contents change
-3. spinbox limits are updated in the quiz panel
-
-WYNN-9: database create
-1. user clicks database add button, MainForm::slot_database_createClicked() is called
-2. empty or non-alphanum name is rejected
-3. call Backend::adDatabase(name), emits countUpdate(0)
-4. new dbase name added to combobox in UI, becomes current
-
-WYNN-10: database save
-1. user clicks save button in UI, connected to MainForm::slot_database_saveClicked()
-2. call Backend->saveDatabase(), contents saved to $HOME/.wynn in xml file
-3. signal status() sent from backend, connected to slot_statusMessage(), shows info in statusbar
-
-WYNN-11: database remove
-1. user clicks delete button in UI, connected to MainForm::slot_database_deleteClicked()
-2. calls backend::deleteDatabase(), removes database from list and destroy object, emits dbaseRemoved(name)
-3. connected to MainForm::slot_database_removed(name), remove item in combobox
-4. should trigger database change (perhaps to null) as in WYNN-9
-
-WYNN-12: add new entry to database
-1. user clicks add button in dbase panel, calls slot MainForm::slot_database_addToClicked()
-2a. No current dbase or locked - emits information(), bound to MainForm::slot_backendInfo(), returns
-2b. Call Backend::addToDbase(), emits dbaseEnterNew("", "");
-3. Continue from WYNN-4.3
-
-WYNN-13: remove entry from database
-1. user clicks delete button in dbase panel, calls slot MainForm::slot_database_removeFromClicked()
-2. Calls Backend::removeFromDatabase(Backend::OP_INIT) emits dbaseRemoveFromConfirm(title, msg)
-3. Calls MainForm::slot_database_removeFromConfirm(), pops yes/no dialog, 
-4. Calls Backend::removeFromDatabase(OP_PROCESS), performs deletion, emits dbaseEntriesRemoved(count)
-5. Calls MainForm::slot_database_entriesRemoved(), updates entry count, sets focus to dbase table
+WYNN_7: copy/move to another database
+1. user selects one or more items and clicks copy/move button
+2a. No database to serve as destination, pop warning, done
+2b. dialog is popped asked for destination database
+3a. destination database locked, pop warning, done
+3b. iterate over selected items and add them to destination database [WYNN_5]
+4a. duplicate detected, pop dialog asking user accept (yes/all), reject (no/none) or cancel (done)
+5. continue with [3b] until all entries processed 

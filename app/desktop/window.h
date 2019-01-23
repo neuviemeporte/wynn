@@ -87,11 +87,13 @@ public slots:
     void slot_database_saveClicked();
 	void slot_database_deleteClicked();
     void slot_database_removed(const QString &name);
+    void slot_database_selectionChanged(const QItemSelection &selected, const QItemSelection &deselected);
 	void slot_database_addToClicked();
 	void slot_database_removeFromClicked();
     void slot_database_removeFromConfirm(const QString& title, const QString& msg);
     void slot_database_entriesRemoved(int count);
 	void slot_database_copyClicked();
+    void slot_database_copyMoveConfirm(const QString &title, const QString &item, const QString &desc, bool move);
 	void slot_database_moveClicked();
 	void slot_database_editClicked();
 	void slot_database_findClicked();

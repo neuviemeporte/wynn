@@ -29,9 +29,9 @@ class Backend : public QObject
     Q_PROPERTY(QString dbaseEnterName MEMBER dbaseEnterName_)
     Q_PROPERTY(QString dbaseEnterItem MEMBER dbaseEnterItem_)
     Q_PROPERTY(QString dbaseEnterDesc MEMBER dbaseEnterDesc_)
-    Q_PROPERTY(QList<int> dbaseSelection MEMBER dbaseSelection_)
+    Q_PROPERTY(QModelIndexList dbaseSelection MEMBER dbaseSelection_ WRITE setDbaseSelection)
     QString dbaseEnterName_, dbaseEnterItem_, dbaseEnterDesc_;
-    QList<int> dbaseSelection_;
+    QModelIndexList dbaseSelection_;
     
 protected:
     enum Notification
@@ -43,7 +43,8 @@ protected:
     db::Database* database(const QString &name) const;
     QString dbasePath(const db::Database *db) const;
     void notify(const Notification type);
-    QList<int> getSelectedDbaseTableIdxs();
+    QList<int> selectedDbaseIndexes();
+    bool checkCurrentDatabase();
     
 public:
     Backend();
@@ -63,6 +64,9 @@ public:
     void switchDatabase(const QString &name);
     void addToDatabase(const Operation op, bool ignoreDuplicates = false);
     void removeFromDatabase(const Operation op);
+    void copyFromDatabase(const Operation op, bool move = false);
+    
+    void setDbaseSelection(const QModelIndexList &selection) { dbaseSelection_ = selection; }
 
 signals:
     void information(const QString &title, const QString &msg);
@@ -78,6 +82,7 @@ signals:
     void dbaseEntryAdded(int entryCount);
     void dbaseRemoveFromConfirm(const QString &title, const QString &msg);
     void dbaseEntriesRemoved(int entryCount);
+    void dbaseCopyMoveConfirm(const QString &title, const QString &item, const QString &desc, bool move);
 };
 
 } // namespace app

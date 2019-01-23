@@ -68,21 +68,33 @@ void Backend::notify(const Backend::Notification type)
     }
 }
 
-QList<int> Backend::getSelectedDbaseTableIdxs() {
+QList<int> Backend::selectedDbaseIndexes() {
     QLOGX("Selected indexes in database table: " << allIdxs.count());
 
     QList<int> rowIdxs;
     for (const auto &idx : dbaseSelection_)	{
-        if (idx.column() != 0)
-            continue;
-
+        if (idx.column() != 0) continue;
         QLOG("row: " << idx.row() << ", col: " << idx.column());
-        int dbaseidx = dbaseModel_->data( dbaseProxyModel_.mapToSource( idx ), Qt::UserRole).toInt();
+        int dbaseidx = dbaseModel_->data( dbaseProxyModel_->mapToSource( idx ), Qt::UserRole).toInt();
         QLOG("New dbase idx: " << dbaseidx);
         rowIdxs.append( dbaseidx );
     }
-
     return rowIdxs;
+}
+
+bool Backend::checkCurrentDatabase()
+{
+    if ( !curDbase_ )
+    {
+        notify(DBASE_NULL);
+        return false;
+    }
+    else if ( curDbase_->locked() )
+    {
+        notify(DBASE_LOCKED);
+        return false;
+    }
+    return true;
 }
 
 void Backend::addDatabase(const QString &name) 
@@ -124,9 +136,9 @@ void Backend::saveDatabase()
 
 void Backend::deleteDatabase()
 {
-    if (!curDbase_) 
+    if (!checkCurrentDatabase()) 
     {
-        QLOGX("Current database is null!");
+        QLOGX("Current database unavailable!");
         return;        
     }
     
@@ -160,15 +172,10 @@ void Backend::switchDatabase(const QString &name)
 
 void Backend::addToDatabase(const Operation op, bool ignoreDuplicates)
 {
-    if ( !curDbase_ )
+    if (!checkCurrentDatabase()) 
     {
-        notify(DBASE_NULL);
-		return;
-	}
-    else if ( curDbase_->locked() )
-    {
-        notify(DBASE_LOCKED);
-        return; 
+        QLOGX("Current database unavailable!");
+        return;        
     }
 
     if ( op == OP_INIT )
@@ -224,15 +231,10 @@ void Backend::addToDatabase(const Operation op, bool ignoreDuplicates)
 
 void Backend::removeFromDatabase(const Operation op)
 {
-    if ( !curDbase_ )
+    if (!checkCurrentDatabase()) 
     {
-        notify(DBASE_NULL);
-        return;
-    }
-    else if ( curDbase_->locked() )
-    {
-        notify(DBASE_LOCKED);
-        return;
+        QLOGX("Current database unavailable!");
+        return;        
     }
     // return if no selection
     else if ( dbaseSelection_.isEmpty() )
@@ -248,7 +250,7 @@ void Backend::removeFromDatabase(const Operation op)
     }
     else if ( op == OP_PROCESS )
     {
-        QList<int> dbIdxs = getSelectedDbaseTableIdxs();
+        QList<int> dbIdxs = selectedDbaseIndexes();
         Q_ASSERT(curDbase_);
         const auto error = curDbase_->remove(dbIdxs);
         if ( error == db::Error::OK )
@@ -260,6 +262,93 @@ void Backend::removeFromDatabase(const Operation op)
             QLOG("Unexpected error: " << error);
         }
     }
+}
+
+void Backend::copyFromDatabase(const Backend::Operation op, bool move)
+{
+    if (!checkCurrentDatabase()) 
+    {
+        QLOGX("Current database unavailable!");
+        return;        
+    }
+    // return if no selection
+    else if ( dbaseSelection_.isEmpty() )
+    {
+        QLOG("Nothing selected, done");
+        return;
+    }
+    
+    if (op == OP_INIT) 
+    {
+        QString title, item, desc;
+        if (move) 
+            title = tr("Move item(s) to another database");
+        else 
+            title = tr("Copy item(s) to another database");
+        
+        if (dbaseSelection_.count() == 1) 
+        {
+            const auto idxs = selectedDbaseIndexes();
+            Q_ASSERT(idxs.count() == 1);
+            const int idx = idxs.front();
+            const Entry& entry = curDbase_->entry(idx);
+            item = entry.item();
+            desc = entry.description();
+        }
+        else 
+        {
+            item = desc = tr("-- multiple --");
+        }
+        
+        emit dbaseCopyMoveConfirm(title, item, desc, move);
+    }
+    else if ( op == OP_PROCESS ) 
+    {
+        QList<int> moveIdxs;
+        for (int curIdx : dbIdxs) {
+            const Entry &entry = curDbase_->entry( curIdx );
+            auto itemText = entry.item();
+            auto descText = entry.description();
+    
+            // if go-ahead given, ignore duplicates
+            if ( answer == QMessageBox::YesToAll ) {
+                Error error = target->add(itemText, descText, {}, true);
+                Q_ASSERT(error == Error::OK);
+                if ( move ) moveIdxs.append( curIdx );
+            }
+            else {
+                // don't ignore duplicates (yet)
+                Error error = target->add(itemText, descText, {}, false);
+                // check error type,
+                if (error == Error::OK) {
+                    // in move mode, add index to successfully copied list for later removal from source
+                    if ( move ) moveIdxs.append( curIdx );
+                    continue;
+                }
+                // if duplicate detected, warn
+                else if ( error == Error::DUPLI && answer != QMessageBox::NoToAll ) {
+                    const Entry &dupEntry = target->entry(error.index());
+                    answer = QMessageBox::information(this, tr("Duplicate entry"),
+                                                      tr("Possible duplicate found for '") + entry.item() + "' (" + entry.description() +
+                                                      tr(") in target database: '") + dupEntry.item() + "' (" + dupEntry.description() +
+                                                      tr("). Continue?"),
+                                                      QMessageBox::Yes | QMessageBox::No | QMessageBox::YesToAll | QMessageBox::NoToAll);
+                }
+                
+                // retry item add with duplicates ignored on "yes" or "yes to all"
+                if ( answer == QMessageBox::Yes || answer == QMessageBox::YesToAll ) {
+                    error = target->add(itemText, descText, {}, true);
+                    if (error != Error::OK) {
+                        QLOG("Unable to add to database despite ignoring duplicates?! (" << error.msg() << ")");
+                        return;
+                    }
+                    if ( move ) moveIdxs.append( curIdx );
+                }
+            } // not YesToAll
+        } // iterate over input indexes        
+        
+    }
+    
 }
 
 } //namespace app 
