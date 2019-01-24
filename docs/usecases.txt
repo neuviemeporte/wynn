@@ -40,6 +40,7 @@ WYNN_7: copy/move to another database
 3a. destination database locked, pop warning, done
 3b. iterate over selected items and add them to destination database [WYNN_5]
 4a. duplicate detected, pop dialog asking user accept (yes/all), reject (no/none) or cancel (done)
+4b. when moving, erase entry from source dbase
 5. continue with [3b] until all entries processed 
 
 WYNN_9: edit database entry
