@@ -1,0 +1,107 @@
+Backend {
+    Database curDbase;
+    List<Database> databases;
+    Answer { NONE, YES, YESALL, NO, NOALL } answer = NONE;
+    Operation { NONE, ENTRY_ADD, ENTRY_DEL, ENTRY_COPY, ENTRY_MOVE, ENTRY_EDIT } curOp = NONE;
+    String entryItem, entryDesc;
+    List<Index> dbSelection;
+}
+
+ui {
+    Dialog dbaseDialog;
+}
+
+// [WYNN_5]
+ui::slot_database_addClicked() { 
+    backend::dbaseEntryAdd();
+}
+
+backend::dbaseEntryAdd() {
+    if (!checkOp()) return; // in the middle of another op
+    if (!dbase) { emit warning("Invalid dbase") -> ui::slot_backend_warning(); return; }
+    curOp = ENTRY_ADD;
+    emit dbaseEntry("", "") -> ui::slot_backend_dbaseEntry()
+}
+
+ui::slot_backend_warning() {
+    MsgBox::warning();
+}
+
+ui::slot_backend_dbaseEntry(item, desc) {
+    dbaseDialog::open(item, desc);
+}
+
+ui::slot_entryDialog_accepted() {
+    if (item.empty || desc.empty) { MsgBox(); return; }
+    backend::dbaseEntryAccepted(item, desc);
+}
+
+ui::slot_entryDialog_rejected() {
+    backend::answer(CANCEL);
+}
+
+backend::dbaseEntryAccepted(item, desc) { // add or edit
+    entryItem = item;
+    entryDesc = desc;
+    continueOperation(); // add or edit
+}
+
+backend::continueOperation() {
+    if (curOp == ENTRY_ADD) {
+        if (answer == CANCEL) { finishOperation(); return; }
+        dupIgnore = (answer == YES || YESALL);
+        error = curDbase::add(entryItem, entryDesc, dupIgnore);
+        if (error == DUPLICATE) 
+            emit question("Accept duplicate?", "blahblah", YES | NO | CANCEL) -> ui::slot_backend_question();
+        else { 
+            emit dbaseEntryUpdated(idx) -> ui::slot_backend_dbaseUpdated(); 
+            finishOperation();
+        }
+    }
+    else if (curOp == ENTRY_DEL) {
+        if (answer == YES) curDbase->remove(idxs);
+        else if (answer == NO) finishOperation();
+        else error();
+    }
+    else {
+        error(); // no operation to process
+    }
+}
+
+backend::finishOperation() {
+    curOp = NONE;
+    answer = NONE;
+    entryItem = entryDesc = "";
+    dbSelection.clear();
+}
+
+ui::slot_backend_question(title, msg, multi) {
+    if (multi) buttons += YESALL NOALL;
+    ans = MsgBox(title, msg, buttons);
+    backend::answer(ans);
+}
+
+backend::answer(ans) {
+    if (curOp == NONE || answer != NONE) {}
+        error(); // answer to unasked question or answer already given
+    }
+    answer = ans;
+    continueOperation();
+}
+
+ui::slot_backend_dbaseUpdated(int focus) {
+    table::setFocus(),setSelection(focus)
+}
+
+// [WYNN_6]
+ui::slot_database_removeClicked() {
+    backend::dbaseEntryRemove(selection);
+}
+
+backend::dbaseEntryRemove(selection) {
+    if (!checkOp()) return; // in the middle of another op
+    if (!dbase) { emit warning("Invalid dbase") -> ui::slot_backend_warning(); return; }
+    curOp = ENTRY_DEL;
+    dbSelection = selection;
+    emit question("Delete 123 item(s)?", "blabla", YES | NO) -> ui::slot_backend_question();
+}

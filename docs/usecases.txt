@@ -41,3 +41,12 @@ WYNN_7: copy/move to another database
 3b. iterate over selected items and add them to destination database [WYNN_5]
 4a. duplicate detected, pop dialog asking user accept (yes/all), reject (no/none) or cancel (done)
 5. continue with [3b] until all entries processed 
+
+WYNN_9: edit database entry
+1. user selects one or more items and clicks edit button
+2a. no database or locked, pop warning, done
+2b. pop entry dialog, populate with entry details, let user edit
+3a. user clicked cancel, done
+3b. update entry contents in database
+4a. duplicate detected, pop dialog asking user accept (yes/all), reject (no/none) or cancel (done)
+5. continue with [2b] until all entries processed 
