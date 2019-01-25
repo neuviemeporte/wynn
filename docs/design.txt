@@ -18,21 +18,21 @@ ui::slot_database_addClicked() {
 
 backend::dbaseEntryAdd() {
     cleanupOperation();
-    if (!dbase) { emit warning("Invalid dbase") -> ui::slot_backend_warning(); return; }
+    dbase || { signal_warning("Invalid dbase"); return; }
     curOp = ENTRY_ADD;
-    emit dbaseEntry("", "") -> ui::slot_backend_dbaseEntry()
+    signal_dbaseEntry("", "");
 }
 
-ui::slot_backend_warning() {
-    MsgBox::warning();
+signal_warning(msg) -> ui::slot_backend_warning() {
+    MsgBox::warning(msg);
 }
 
-ui::slot_backend_dbaseEntry(item, desc) {
+signal_dbaseEntry(item, desc) -> ui::slot_backend_dbaseEntry() {
     dbaseDialog::open(item, desc);
 }
 
 ui::slot_entryDialog_accepted() {
-    if (item.empty || desc.empty) { MsgBox(); return; }
+    item.empty || desc.empty { MsgBox(); return; }
     backend::entry(item, desc);
 }
 
@@ -43,73 +43,75 @@ ui::slot_entryDialog_rejected() {
 backend::entry(item, desc) {
     entryItem = item;
     entryDesc = desc;
-    answer(YES);
+    continueOperation();
 }
 
 backend::continueOperation() {
-    if (curOp == ENTRY_ADD) {
-        if (answer == CANCEL) { cleanupOperation(); return; }
-        dupIgnore = (answer == YES || YESALL);
+    curOp == ENTRY_ADD: {
+        answer == CANCEL: { cleanupOperation(); return; }
+        answer == YES || YESALL: dupIgnore = true;
         error = curDbase::add(entryItem, entryDesc, dupIgnore);
-        if (error == DUPLICATE) 
-            emit question("Accept duplicate?", "blahblah", YES | NO | CANCEL) -> ui::slot_backend_question();
-        else { 
-            emit dbaseEntryUpdated(idx) -> ui::slot_backend_dbaseUpdated(); 
-            cleanupOperation();
-        }
+        error == DUPLICATE: { signal_question("Accept duplicate?", "blahblah", YES | NO | CANCEL); return; }
+        cleanupOperation();
+        signal_dbaseUpdated(idx);
+        return;
     }
-    else if (curOp == ENTRY_DEL) {
-        if (answer == YES) curDbase->remove(idxs);
-        else if (answer == NO) cleanupOperation();
-        else error();
+    curOp == ENTRY_DEL: {
+        answer == YES: curDbase->remove(idxs);
+        else: error();
+        cleanupOperation();
     }
-    else if (curOp == ENTRY_COPY || ENTRY_MOVE) {
-        Database db = databases(targetName);
-        for (idx : dbSelection) {
-            if (answer == CANCEL) break;
-            else if (answer != NO) {
-                bool dupIgnore = (answer == YES || YESALL);
+    curOp == ENTRY_COPY || ENTRY_MOVE: {
+        db = databases(targetName);
+        idx : dbSelection {
+            answer == CANCEL: break;
+            answer != NO: {
+                answer == YES || YESALL: dupIgnore = true;
                 entry = curDbase->entry(idx);
                 error = db->add(entry, dupIgnore);
-                if (error == DUPLICATE && answer != NO || NOALL) { // ask about duplicate unless already answered no
-                    emit question("Accept duplicate?", "blabla", YES | NO | YESALL | NOALL | CANCEL); 
+                error == DUPLICATE && answer != NO || NOALL: { // ask about duplicate unless already answered no
+                    signal_question("Accept duplicate?", "blabla", YES | NO | YESALL | NOALL | CANCEL); 
                     return; // will retry same entry next time around
                 }
-                if (curOp == ENTRY_MOVE && error == OK) curDbase->remove(idx);
+                
+                curOp == ENTRY_MOVE && error == OK: curDbase->remove(idx);
             }
-            if (answer == YES || NO) answer = NONE; // yes/no answer good only for one iteration
+            answer == YES || NO: answer = NONE; // yes/no answer good only for one iteration
             dbSelection->remove(idx);
         }
         cleanupOperation();
     }
-    else {
-        error(); // no operation to process
+    curOp == ENTRY_EDIT: {
+        idx : dbSelection {
+            entry = curDbase->entry(idx);
+            signal_dbaseEntry(entry.item, entry.desc);
+        }
     }
+    else: error(); // no operation to continue
 }
 
 backend::cleanupOperation() {
     curOp = NONE;
     answer = NONE;
-    entryItem = entryDesc = "";
+    entryItem = entryDesc = targetName = "";
     dbSelection.clear();
 }
 
-ui::slot_backend_question(title, msg, multi) {
-    if (multi) buttons += YESALL NOALL;
+signal_question(title, msg, buttons) -> ui::slot_backend_question() {
     ans = MsgBox(title, msg, buttons);
     backend::answer(ans);
 }
 
 backend::answer(ans) {
-    if (curOp == NONE || answer != NONE) {}
+    curOp == NONE || answer != NONE: {
         error(); // answer to unasked question or old answer not cleaned
     }
     answer = ans;
     continueOperation();
 }
 
-ui::slot_backend_dbaseUpdated(int focus) {
-    table::setFocus(),setSelection(focus)
+signal_dbaseUpdated(focus) -> ui::slot_backend_dbaseUpdated() {
+    table::setFocus(),setSelection(focus);
 }
 
 // [WYNN_6]
@@ -118,11 +120,11 @@ ui::slot_database_removeClicked() {
 }
 
 backend::dbaseEntryRemove(selection) {
-    if (!checkOp()) return; // in the middle of another op
-    if (!dbase) { emit warning("Invalid dbase") -> ui::slot_backend_warning(); return; }
+    cleanupOperation();
+    dbase || { ui::slot_backend_warning("Invalid dbase"); return; }
     curOp = ENTRY_DEL;
     dbSelection = selection;
-    emit question("Delete 123 item(s)?", "blabla", YES | NO) -> ui::slot_backend_question();
+    ui::slot_backend_question("Delete 123 item(s)?", "blabla", YES | NO);
 }
 
 // [WYNN_7]
@@ -132,13 +134,13 @@ ui::slot_database_copyClicked() {
 
 backend::dbaseEntryCopy(selection, move) {
     cleanupOperation();
-    if (!dbase) { emit warning("Invalid dbase") -> ui::slot_backend_warning(); return; }
-    curOp = (move ? ENTRY_MOVE : ENTRY_COPY);
+    dbase || { ui::slot_backend_warning("Invalid dbase"); return; }
+    move: curOp = ENTRY_MOVE else: curOp = ENTRY_COPY;
     dbSelection = selection;
-    emit selection("Select target", "blabla", dbNames) -> ui::slot_backend_selection();
+    signal_selection("Select target", "blabla", dbNames)
 }
 
-ui::slot_backend_selection(title, msg, items) {
+ signal_selection -> ui::slot_backend_selection(title, msg, items) { 
     ans = InputDialog::select(title, msg, items);
     backend::target(ans);
 }
@@ -151,4 +153,12 @@ backend::target(name) {
 // [WYNN_8]
 ui::slot_database_editClicked() {
     backend::dbaseEntryEdit(selection);
+}
+
+backend::dbaseEntryEdit(selection) {
+    cleanupOperation();
+    dbSelection = selection;
+    dbase || { signal_warning("Invalid dbase"); return; }
+    curOp = ENTRY_EDIT;
+    signal_dbaseEntry(dbSelection.front());
 }
