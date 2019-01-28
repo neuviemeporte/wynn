@@ -51,3 +51,21 @@ WYNN_9: edit database entry
 3b. update entry contents in database
 4a. duplicate detected, pop dialog asking user accept (yes/all), reject (no/none) or cancel (done)
 5. continue with [2b] until all entries processed 
+
+WYNN_10: find database item
+1. user clicks find button, enters expression to search (old expression persists in selected mode inside dialog)
+2. current database is searched for first match from position of current selection in database, or beginning if nothing selected
+3a. if match found, view is focused on matching item in database
+3b. otherwise message to the effect of "no match" shown
+
+WYNN_11: export database to file
+1. user clicks export button
+2. save file dialog shown to let them pick place to save the html file
+3. html file is saved to disk and message shown in status bar 
+
+WYNN_12: reset database
+1. user clicks reset button
+2. question dialog shown clarifying and asking for confirmation
+3. if user pressed yes, points for all items are reset in current database
+
+WYNN_13: database quiz

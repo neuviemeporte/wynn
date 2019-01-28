@@ -74,16 +74,8 @@ signals:
     void error(const QString &title, const QString &msg);
     void status(const QString msg);
     
-    void dbaseEnterNew(const QString &item = {}, const QString &desc = {});
-    void dbaseDuplicate(const QString &title, const QString &msg);
-    void dbaseItemCount(const int itemCount);
-    void dbaseAdded(const QString &name);
-    void dbaseRemoved(const QString &name);
-    void dbaseEntryAdded(int entryCount);
-    void dbaseRemoveFromConfirm(const QString &title, const QString &msg);
-    void dbaseEntriesRemoved(int entryCount);
-    void dbaseCopyMoveConfirm(const QString &title, const QString &item, const QString &desc, bool move);
 };
+
 
 } // namespace app
 } // namespace wynn

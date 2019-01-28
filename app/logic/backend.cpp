@@ -264,6 +264,7 @@ void Backend::removeFromDatabase(const Operation op)
     }
 }
 
+
 void Backend::copyFromDatabase(const Backend::Operation op, bool move)
 {
     if (!checkCurrentDatabase()) 
