@@ -1,30 +1,62 @@
 Backend:
     Database curDbase;
     List<Database> databases;
+    Quiz quiz;
     Answer { NONE, YES, YESALL, NO, NOALL } answer = NONE;
-    Operation { NONE, ENTRY_ADD, ENTRY_DEL, ENTRY_COPY, ENTRY_MOVE, ENTRY_EDIT, ENTRY_FIND } curOp = NONE;
+    Operation { NONE, ENTRY_ADD, ENTRY_DEL, ENTRY_COPY, ENTRY_MOVE, ENTRY_EDIT, ENTRY_FIND, QUIZ } curOp = NONE;
     String entryItem, entryDesc, itemName, text;
     List<Index> dbSelection;
 
 ui:
     Dialog dbaseDialog;
+    Dialog quizDialog;
 
-// [WYNN_5]
+// [WYNN_1.1]
+ui::slot_database_changeCurrent(text)
+    text.empty():
+        disableDbaseWidgets();
+    else:
+        enableDbaseWidgets();
+    backend.dbaseSwitch(text);
+
+backend::dbaseSwitch(text):
+    curDbase = databases(text);
+    dbaseModel.setSource(curDbase);
+    dbaseUpdated
+
+// [WYNN_1.2]
+ui::slot_database_createClicked()
+
+// [WYNN_1.3]
+ui::slot_database_saveClicked()
+    backend.saveDatabase();
+
+backend::saveDatabase():
+    curDbase.save();
+    status("Saved to ...") -> ui::slot_backend_status();
+
+ui::slot_backend_status(msg):
+    statusBar.setText(msg);
+
+// [WYNN_1.4]
+ui::slot_database_deleteClicked()
+
+// [WYNN_1.5]
 ui::slot_database_addClicked():
     backend.dbaseEntryAdd();
 
 backend::dbaseEntryAdd():
     !dbase:
-        signal_warning("Invalid dbase"); 
+        warning("Invalid dbase") -> ui::slot_backend_warning(); 
         return;
     cleanupOperation();
     curOp = ENTRY_ADD;
-    signal_dbaseEntry("", "");
+    dbaseEntry("", "") -> ui::slot_backend_dbaseEntry();
 
-signal_warning(msg) -> ui::slot_backend_warning():
+ui::slot_backend_warning(msg):
     MsgBox::warning(msg);
 
-signal_dbaseEntry(item, desc) -> ui::slot_backend_dbaseEntry():
+ui::slot_backend_dbaseEntry(item, desc):
     dbaseDialog.open(item, desc);
 
 ui::slot_entryDialog_accepted():
@@ -50,17 +82,17 @@ backend::continueOperation():
         answer == YES || YESALL: dupIgnore = true;
         error = curDbase.add(entryItem, entryDesc, dupIgnore);
         error == DUPLICATE: 
-            signal_question("Accept duplicate?", "blahblah", YES | NO | CANCEL); 
+            question("Accept duplicate?", "blahblah", YES | NO | CANCEL) -> ui::slot_backend_question()
             return;
-        signal_dbaseUpdated(idx);
+        dbaseUpdated(idx) -> ui::slot_backend_dbaseUpdated();
         return;
     curOp == ENTRY_DEL:
         answer == YES: 
-            curDbase->remove(idxs);
+            curDbase.remove(idxs);
         else: 
             error();
 
-        signal_dbaseUpdated(idx);
+        dbaseUpdated(idx) -> ui::slot_backend_dbaseUpdated();
     curOp == ENTRY_COPY || ENTRY_MOVE || ENTRY_EDIT:
         target = databases(itemName);
         idx <- dbSelection:
@@ -68,33 +100,33 @@ backend::continueOperation():
             answer != NO:
                 answer == YES || YESALL: dupIgnore = true;
                 curOp == ENTRY_EDIT:
-                    error = target->alter(index, entryItem, entryDesc, dupIgnore);
+                    error = target.alter(index, entryItem, entryDesc, dupIgnore);
                 else:
-                    entry = curDbase->entry(idx);
-                    error = target->add(entry, dupIgnore);
+                    entry = curDbase.entry(idx);
+                    error = target.add(entry, dupIgnore);
 
                 error == DUPLICATE && answer != NO || NOALL: // ask about duplicate unless already answered no
-                    signal_question("Accept duplicate?", "blabla", YES | NO | YESALL | NOALL | CANCEL); 
+                    question("Accept duplicate?", "blabla", YES | NO | YESALL | NOALL | CANCEL) -> ui::slot_backend_question(); 
                     return; // will retry same entry next time around
 
                 curOp == ENTRY_MOVE && error == OK: 
-                    curDbase->remove(idx);
+                    curDbase.remove(idx);
             
             answer == YES || NO: 
                 answer = NONE; // yes/no answer good only for one iteration
 
-            dbSelection->remove(idx);
+            dbSelection.remove(idx);
             curOp == ENTRY_EDIT:
-                signal_dbaseEntry(dbSelection.front()); // pop next dialog for editing
+                dbaseEntry(dbSelection.front()) -> ui::slot_backend_dbaseEntry(); // pop next dialog for editing
                 return; 
     curOp == ENTRY_FIND:
         idx = dbSelection.front();
-        found = curDbase->findEntry(text, idx);
+        found = curDbase.findEntry(text, idx);
         fond < 0:
-            found = curDbase->findEntry(text, 0);
+            found = curDbase.findEntry(text, 0);
         found < 0:
-            signal_warning("Nothing found");
-        signal_dbaseFound(found);
+            warning("Nothing found") -> ui::slot_backend_warning();
+        dbaseFound(found) -> ui::slot_backend_dbaseEntryFound();
     else: 
         error(); // no operation to continue
 
@@ -104,7 +136,7 @@ backend::cleanupOperation():
     entryItem = entryDesc = itemName = "";
     dbSelection.clear();
 
-signal_question(title, msg, buttons) -> ui::slot_backend_question():
+ui::slot_backend_question(title, msg, buttons):
     ans = MsgBox(title, msg, buttons);
     backend.answer(ans);
 
@@ -114,33 +146,30 @@ backend::answer(ans):
     answer = ans;
     continueOperation();
 
-signal_dbaseUpdated(focus) -> ui::slot_backend_dbaseUpdated():
+ui::slot_backend_dbaseUpdated(focus):
     table.setFocus(),setSelection(focus);
 
-// [WYNN_6]
+// [WYNN_1.6]
 ui::slot_database_removeClicked():
     backend.dbaseEntryRemove(selection);
 
 backend::dbaseEntryRemove(selection):
     !dbase || selection.empty():
-        signal_warning();
+        warning() -> ui::slot_backend_warning();
         return;
     cleanupOperation();
     curOp = ENTRY_DEL;
     dbSelection = selection;
     signal_question("Delete 123 item(s)?", "blabla", YES | NO);
 
-// [WYNN_7]
+// [WYNN_1.7]
 ui::slot_database_copyClicked():
-    backend.dbaseEntryCopy(selection, false);
-
-// [WYNN_8]
 ui::slot_database_moveClicked():
-    backend.dbaseEntryCopy(selection, true);
+    backend.dbaseEntryCopy(selection, move);
 
 backend::dbaseEntryCopy(selection, move):
     !dbase || selection.empty():
-        signal_warning();
+        warning() -> ui::slot_backend_warning();
         return;
     cleanupOperation();
     move: 
@@ -148,9 +177,9 @@ backend::dbaseEntryCopy(selection, move):
     else: 
         curOp = ENTRY_COPY;
     dbSelection = selection;
-    signal_selection("Select target", "blabla", dbNames)
+    selection("Select target", "blabla", dbNames) -> ui::slot_backend_selection();
 
- signal_selection -> ui::slot_backend_selection(title, msg, items):
+ ui::slot_backend_selection(title, msg, items):
     ans = InputDialog::select(title, msg, items);
     backend.item(ans);
 
@@ -158,39 +187,122 @@ backend::item(name):
     itemName = name;
     continueOperation();
 
-// [WYNN_9]
+// [WYNN_1.8]
 ui::slot_database_editClicked():
     backend.dbaseEntryEdit(selection);
 
 backend::dbaseEntryEdit(selection):
     !dbase || selection.empty():
-        signal_warning();
+        warning() -> ui::slot_backend_warning();
         return;
     cleanupOperation();
     dbSelection = selection;
     curOp = ENTRY_EDIT;
-    signal_dbaseEntry(dbSelection.front());
+    dbaseEntry(dbSelection.front()) -> ui::slot_backend_dbaseEntry();
 
-// [WYNN_10]
+// [WYNN_1.9]
 ui::slot_database_findClicked():
     backend.dbaseEntryFind(selection, expr);
 
 backend::dbaseEntryFind(selection, expr):
     !dbase || selection.empty() || expr.empty():
-        signal_warning();
+        warning() -> ui::slot_backend_warning();
         return;
     cleanupOperation();
     dbSelection = selection;
     curOp = ENTRY_FIND;
-    signal_text("Input string");
+    getText("Input string") -> ui::slot_backend_text();
 
-signal_text(title, msg) -> ui::slot_backend_text():
+ui::slot_backend_getText(title, msg):
     expr = DialogBox();
-    backend.text(expr);
+    backend.setText(expr);
 
-backend::text(str):
+backend::setText(str):
     text = str;
     continueOperation();
 
-signal_dbaseFound(found) -> ui::slot_backend_dbaseEntryFound(found):
+ui::slot_backend_dbaseEntryFound(found):
     table.select(found);
+
+// [WYNN_1.10]
+ui::slot_database_exportClicked():
+    path = FileDialog();
+    backend.dbaseExport(path);
+
+backend::dbaseExport(path):
+    !dbase:
+        warning() -> ui::slot_backend_warning();
+        return;
+    curDbase.export(path);
+    status(path) -> ui::slot_backend_status();
+
+// [WYNN_1.11]
+ui::slot_database_resetClicked():
+    ans = Dialog("Are you sure?");
+    ans == YES:
+        backend.dbaseReset();
+
+backend::dbaseReset():
+    !dbase:
+        warning() -> ui::slot_backend_warning();
+        return;
+    curDbase.reset();
+
+// [WYNN_1.12]
+ui::slot_database_quizClicked():
+    // TODO: quiz item count from backend for settings?
+    settings = getQuizSettings();
+    backend.dbaseQuiz(settings);
+
+backend::dbaseQuiz(settings):
+    !dbase:
+        warning() -> ui::slot_backend_warning();
+        return;
+    quiz = Quiz(curDbase, settings);
+    quiz.empty():
+        warning("No questions") -> ui::slot_backend_warning();
+        return;
+    curOp = QUIZ;
+    curDbase.lock(); // disallow modification to dbase while quiz in progress
+    quizQuestion(quiz.questionText(), quiz.answerText()) -> ui::slot_database_quizQuestion();
+
+ui::slot_quiz_question(q, a):
+    quizDialog.setText(QUESTION, q);
+    quizDialog.setText(ANSWER, a);
+    quizDialog.setVisible(ANSWER, false);
+    quizDialog.disableButtons(CORRECT | INCORRECT | UNSURE);
+    quizDialog.enableButtons(REVEAL);
+
+ui::slot_quiz_reveal():
+    quizDialog.setVisible(ANSWER, true);
+    quizDialog.enableButtons(CORRECT | INCORRECT | UNSURE);
+    quizDialog.disableButtons(REVEAL);
+
+ui::slot_quiz_correctClicked():
+ui::slot_quiz_incorrectClicked():
+ui::slot_quiz_unsureClicked():
+    backend.quizAnswer(CORRECT | INCORRECT | UNSURE);
+
+backend::quizAnswer(type);
+    quiz.answer(type);
+    quiz.done():
+        quizDone() -> ui::slot_quiz_done();
+        return;
+    quizQuestion(quiz.questionText(), quiz.answerText()) -> ui::slot_database_quizQuestion();
+
+ui::slot_quiz_done():
+    quizDialog.hide();
+    backend.quizFinish(true);
+
+backend.quizFinish(save):
+    save:
+        quiz.saveResults();
+    delete quiz;
+
+ui::slot_quiz_cancelClicked():
+    ans = Dialog("Save partial results?");
+    ans == CANCEL:
+        return;
+    quizDialog.hide();
+    save = (ans == YES);
+    backend.quizFinish(save);
