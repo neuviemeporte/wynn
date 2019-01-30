@@ -3,12 +3,13 @@ Backend:
     List<Database> databases;
     Quiz quiz;
     Answer { NONE, YES, YESALL, NO, NOALL } answer = NONE;
-    Operation { NONE, ENTRY_ADD, ENTRY_DEL, ENTRY_COPY, ENTRY_MOVE, ENTRY_EDIT, ENTRY_FIND, QUIZ } curOp = NONE;
+    Operation { NONE, ENTRY_ADD, ENTRY_DEL, ENTRY_COPY, ENTRY_MOVE, ENTRY_EDIT, 
+            ENTRY_FIND, QUIZ } curOp = NONE;
     String entryItem, entryDesc, itemName, text;
     List<Index> dbSelection;
 
 ui:
-    Dialog dbaseDialog;
+    Dialog entryDialog;
     Dialog quizDialog;
 
 // [WYNN_1.1]
@@ -22,10 +23,34 @@ ui::slot_database_changeCurrent(text)
 backend::dbaseSwitch(text):
     curDbase = databases(text);
     dbaseModel.setSource(curDbase);
-    dbaseUpdated
+    dbaseItemCount(entryCount) -> ui::slot_database_countUpdate();
+
+ui::slot_database_countUpdate(count):
+    spinbox.setMax(count);
 
 // [WYNN_1.2]
-ui::slot_database_createClicked()
+ui::slot_database_createClicked():
+    name = Dialog();
+    name.empty() || !name.match(regex):
+        MessageBox::warning();
+        return;
+    backend.addDatabase(name);
+
+backend::addDatabase(name):
+    name.empty():
+        return;
+    db <- databases:
+        db.name == name:
+            warning("Database exists");
+            return;
+
+    db = Database(name)
+    databases.append(db);
+    dbaseAdded(name) -> ui::slot_database_added();
+
+ui::slot_database_added(name):
+    slot_database_countUpdate(0);
+    dbCombo.addItem(name),setCurrentText(name),setEnabled(true);
 
 // [WYNN_1.3]
 ui::slot_database_saveClicked()
@@ -39,7 +64,24 @@ ui::slot_backend_status(msg):
     statusBar.setText(msg);
 
 // [WYNN_1.4]
-ui::slot_database_deleteClicked()
+ui::slot_database_deleteClicked():
+    name = dbCombo.currentText();
+    name.empty():
+        return;
+    MessageBox("You sure?") == YES:
+        backend.deleteDatabase();
+
+backend::deleteDatabase():
+    checkCurrentDatabase():
+        return;
+    file = curDbase.path();
+    file.remove();
+    databases.remove(curDbase);
+    delete curDbase;
+    dbaseRemoved(name) -> ui::slot_database_removed();
+
+ui::slot_database_removed(name):
+    dbCombo.remove(name) -> ui::slot_database_changeCurrent();
 
 // [WYNN_1.5]
 ui::slot_database_addClicked():
@@ -57,7 +99,7 @@ ui::slot_backend_warning(msg):
     MsgBox::warning(msg);
 
 ui::slot_backend_dbaseEntry(item, desc):
-    dbaseDialog.open(item, desc);
+    entryDialog.open(item, desc);
 
 ui::slot_entryDialog_accepted():
     item.empty || desc.empty:
@@ -82,7 +124,8 @@ backend::continueOperation():
         answer == YES || YESALL: dupIgnore = true;
         error = curDbase.add(entryItem, entryDesc, dupIgnore);
         error == DUPLICATE: 
-            question("Accept duplicate?", "blahblah", YES | NO | CANCEL) -> ui::slot_backend_question()
+            question("Accept duplicate?", "blahblah", 
+                    YES | NO | CANCEL) -> ui::slot_backend_question()
             return;
         dbaseUpdated(idx) -> ui::slot_backend_dbaseUpdated();
         return;
@@ -105,8 +148,11 @@ backend::continueOperation():
                     entry = curDbase.entry(idx);
                     error = target.add(entry, dupIgnore);
 
-                error == DUPLICATE && answer != NO || NOALL: // ask about duplicate unless already answered no
-                    question("Accept duplicate?", "blabla", YES | NO | YESALL | NOALL | CANCEL) -> ui::slot_backend_question(); 
+                // ask about duplicate unless already answered no
+                error == DUPLICATE && answer != NO || NOALL: 
+                    question("Accept duplicate?", "blabla", 
+                        YES | NO | YESALL | NOALL | CANCEL) 
+                            -> ui::slot_backend_question(); 
                     return; // will retry same entry next time around
 
                 curOp == ENTRY_MOVE && error == OK: 
@@ -117,7 +163,9 @@ backend::continueOperation():
 
             dbSelection.remove(idx);
             curOp == ENTRY_EDIT:
-                dbaseEntry(dbSelection.front()) -> ui::slot_backend_dbaseEntry(); // pop next dialog for editing
+                // pop next dialog for editing
+                dbaseEntry(dbSelection.front()) 
+                    -> ui::slot_backend_dbaseEntry(); 
                 return; 
     curOp == ENTRY_FIND:
         idx = dbSelection.front();
@@ -264,7 +312,8 @@ backend::dbaseQuiz(settings):
         return;
     curOp = QUIZ;
     curDbase.lock(); // disallow modification to dbase while quiz in progress
-    quizQuestion(quiz.questionText(), quiz.answerText()) -> ui::slot_database_quizQuestion();
+    quizQuestion(quiz.questionText(), quiz.answerText()) 
+        -> ui::slot_database_quizQuestion();
 
 ui::slot_quiz_question(q, a):
     quizDialog.setText(QUESTION, q);
@@ -288,7 +337,8 @@ backend::quizAnswer(type);
     quiz.done():
         quizDone() -> ui::slot_quiz_done();
         return;
-    quizQuestion(quiz.questionText(), quiz.answerText()) -> ui::slot_database_quizQuestion();
+    quizQuestion(quiz.questionText(), quiz.answerText()) 
+        -> ui::slot_database_quizQuestion();
 
 ui::slot_quiz_done():
     quizDialog.hide();

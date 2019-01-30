@@ -452,7 +452,7 @@ void MainForm::slot_database_removed(const QString &name)
 void MainForm::slot_database_addToClicked() 
 {
     QLOG("Database Add button clicked");
-    backend_->addToDatabase(Backend::OP_INIT);
+    backend_->dbaseEntryAdd();
 }
 
 void MainForm::slot_dbase_enterNew(const QString& item, const QString& desc)
@@ -480,7 +480,7 @@ void MainForm::slot_dbase_enterNew(const QString& item, const QString& desc)
     // show dialog for user to accept the operation
     if ( dbaseDialog_->exec() == QDialog::Accepted )
     {
-        backend_->addToDatabase(Backend::OP_PROCESS);
+        backend_->dbaseEntryAdd(Backend::OP_PROCESS);
     }
 }
 
@@ -497,7 +497,7 @@ void MainForm::slot_dbase_duplicate(const QString &title, const QString &msg)
     if (button == QMessageBox::Yes)
     {
         QLOG("User wants to add anyway");
-        backend_->addToDatabase(Backend::OP_PROCESS, true);
+        backend_->dbaseEntryAdd(Backend::OP_PROCESS, true);
     }
     else
     {
