@@ -13,21 +13,29 @@ const QString APPDIR      = QDir::homePath() + "/.wynn";
 const QString SETT_EXTDIR = "extdir";
 const QString SETT_NODUPS = "nodbdups";
 const QString SETT_CURDB  = "curdb";
-
 } // namespace
 
 namespace wynn {
 namespace app {
 
-static const std::map<Backend::Operation, std::string> OP_NAME = {
-  { Backend::OP_NONE,       "OP_NONE"       },
-  { Backend::OP_ENTRY_ADD,  "OP_ENTRY_ADD"  },
-  { Backend::OP_ENTRY_DEL,  "OP_ENTRY_DEL"  },
-  { Backend::OP_ENTRY_COPY, "OP_ENTRY_COPY" }, 
-  { Backend::OP_ENTRY_MOVE, "OP_ENTRY_MOVE" },
-  { Backend::OP_ENTRY_EDIT, "OP_ENTRY_EDIT" },
-  { Backend::OP_ENTRY_FIND, "OP_ENTRY_FIND" },
-  { Backend::OP_QUIZ,       "OP_QUIZ"       } 
+static const std::map<Backend::Operation, std::string> OP_STR = {
+  { Backend::OP_NONE,       "NONE"       },
+  { Backend::OP_ENTRY_ADD,  "ENTRY_ADD"  },
+  { Backend::OP_ENTRY_DEL,  "ENTRY_DEL"  },
+  { Backend::OP_ENTRY_COPY, "ENTRY_COPY" }, 
+  { Backend::OP_ENTRY_MOVE, "ENTRY_MOVE" },
+  { Backend::OP_ENTRY_EDIT, "ENTRY_EDIT" },
+  { Backend::OP_ENTRY_FIND, "ENTRY_FIND" },
+  { Backend::OP_QUIZ,       "QUIZ"       } 
+};
+
+static const std::map<Backend::Answer, std::string> ANS_STR = {
+  { Backend::ANS_NONE,   "NONE" },  
+  { Backend::ANS_YES,    "YES" },   
+  { Backend::ANS_YESALL, "YESALL" },
+  { Backend::ANS_NO,     "NO" },    
+  { Backend::ANS_NOALL,  "NOALL" },
+  { Backend::ANS_CANCEL, "CANCEL" },
 };
 
 Backend::Backend() : QObject(),
@@ -48,8 +56,34 @@ Backend::~Backend() {
     delete db;
 }
 
+void Backend::setEntry(const QString &item, const QString &desc) {
+  QLOGX("Setting entry: " << item << desc);
+  entryItem_ = item;
+  entryDesc_ = desc;
+  continueOperation();
+}
 
-void Backend::switchDatabase(const QString &name) {
+void Backend::setAnswer(const Backend::Answer ans) {
+  QLOGX("Setting answer: " << ANS_STR[ans] << ", current operation: " << OP_STR[curOp_]);
+  if (ans == ANS_NONE || curOp_ == OP_NONE) {
+    QLOG("Invalid answer or no operation in progress!");
+    return;
+  }
+  answer_ = ans;
+  continueOperation();
+}
+
+void Backend::setItem(const QString &item) {
+  QLOGX("Setting item: " << item << ", current operation: " << OP_STR[curOp_]);
+  if (item.isEmpty()) {
+    QLOG("No item selected, canceling operation");
+    return;
+  }
+  itemName_ = item;
+  continueOperation();
+}
+
+void Backend::dbaseSwitch(const QString &name) {
   curDbase_ = database(name);
   // in case the selection became empty (last database removed),
   // set current dbase handle to null and disconnect signals from model to database
@@ -59,7 +93,7 @@ void Backend::switchDatabase(const QString &name) {
   emit dbaseItemCount(entryCount);
 }
 
-void Backend::addDatabase(const QString &name) {
+void Backend::dbaseCreate(const QString &name) {
   if (name.isEmpty()) {
     QLOGX("Database name is empty!");
     return;
@@ -80,7 +114,7 @@ void Backend::addDatabase(const QString &name) {
   emit dbaseAdded(name);
 }
 
-void Backend::saveDatabase() {
+void Backend::dbaseSave() {
   if (!curDbase_ ) {
     QLOGX("Current database is null!");
     return;
@@ -88,11 +122,13 @@ void Backend::saveDatabase() {
   
   const auto path = dbasePath(curDbase_);
   curDbase_->saveXML(path);
-  const auto msg = tr("Database saved to %1 (%2 items)").arg(path).arg(curDbase_->entryCount());    
+  const auto msg = tr("Database saved to %1 (%2 items)")
+      .arg(path)
+      .arg(curDbase_->entryCount());    
   emit status(msg);
 }
 
-void Backend::deleteDatabase() {
+void Backend::dbaseDelete() {
   if (!checkCurrentDatabase()) {
     QLOGX("Current database unavailable!");
     return;        
@@ -115,177 +151,177 @@ void Backend::deleteDatabase() {
 }
 
 void Backend::dbaseEntryAdd() {
-  if (!checkCurrentDatabase()) 
-    return;
-  
+  if (!checkCurrentDatabase()) return;
   cleanupOperation();
+  curOp_ = OP_ENTRY_ADD;
+  emit dbaseEntry(tr("Add entry to database"), {}, {});
+}
+
+void Backend::dbaseEntryRemove(const QModelIndexList &selection) {
+  if (!checkCurrentDatabase()) return;
+  if (selection.empty()) {
+    QLOGX("Selection is empty!");
+    return;
+  }
+  cleanupOperation();
+  curOp_ = OP_ENTRY_DEL;
+  selection_ = selection;
+  emit question(tr("Delete items?"), 
+                tr("Are you sure you want to remove %1 items from database '%2'?")
+                .arg(curDbase_->entryCount())
+                .arg(curDbase_->name()), { ANS_YES, ANS_NO });
+}
+
+void Backend::dbaseEntryCopy(const QModelIndexList &selection, const bool move) {
+  if (!checkCurrentDatabase()) return;
+  if (selection.empty()) {
+    QLOGX("Selection is empty!");
+    return;
+  }
+  cleanupOperation();
+  curOp_ = (move ? OP_ENTRY_MOVE : OP_ENTRY_COPY);
+  selection_ = selection;
+  QStringList dbNames;
+  for (auto db : databases_) 
+    if (db != curDbase_) dbNames.append(db->name());
   
-    const QString
-        userItem  = dbaseEnterItem_.simplified(),
-        userDesc  = dbaseEnterDesc_.simplified();
-    
-    // guard against empty input on line edits
-    if (userItem.isEmpty() || userDesc.isEmpty())
-    {
-      emit warning(tr("Error"), tr("Entry and Description fields may not be empty!"));
+  if (dbNames.empty())
+    emit error(tr("Error"), tr("No eligible target database exists. Create one and retry."));
+  
+  QString msg = (move ? "Move" : "Copy") + tr(" %1 entries to database:").arg(selection.count());
+  emit item(tr("Select target"), msg, dbNames);
+}
+
+// TODO: execute actual work on separate thread
+void Backend::continueOperation() {
+  QLOGX("Continuing operation, current: " << OP_STR[curOp_]);
+  if (curOp_ == OP_ENTRY_ADD) {
+    if (answer_ == ANS_NO) {
+      QLOG("Operation was canceled");
       return;
     }
-    
-    QLOG("Adding entry to database '" << dbaseEnterName_ << "', item: '" << userItem << "', description: '" << userDesc << "'" );
-    auto dbase = database(dbaseEnterName_);
-    if (!dbase)
-    {
-      QLOG("Database handle is null!");
-      return;
-    }
-    
-    auto error = dbase->add(userItem, userDesc, {}, ignoreDuplicates);
-    if (error == db::Error::DUPLI)
-    {
+    const bool dupIgnore = (answer_ == ANS_YES || answer_ == ANS_YESALL);
+    QLOG("Adding entry, item = " << entryItem_ << ", desc = " << entryDesc_ << " dupIgnore: " << dupIgnore);
+    Q_ASSERT(!entryItem_.isEmpty() && !entryDesc_.isEmpty());
+    const auto error = curDbase_->add(entryItem_, entryDesc_, {}, dupIgnore);
+    if (error == Error::DUPLI) {
       // TODO: could be duplicate of multiple items, show all of them in the dialog
       int dupidx = error.index();
       const Entry &dupEntry = dbase->entry(dupidx);
       // TODO: move all strings to UI?
-      const QString msg = tr("A similar entry was found to already exist in the database:\n"
-                             "'%1' / '%2' (%3).\n"
-                             "While trying to add entry:\n"
-                             "'%4' / '%5'\n"
-                             "Do you want to add it anyway?").arg(dupEntry.item()).arg(dupEntry.description()).arg(dupidx + 1).arg(userItem).arg(userDesc);
-      
-      emit dbaseDuplicate(tr("Possible duplicate"), msg);
-    }
-    else if (error != db::Error::OK)
-    {
-      QLOG("Unexpected error: " << error);
-      // TODO: handle
+      const QString msg = tr(
+            "A similar entry was found to already exist in the database:\n"
+            "'%1' / '%2' (%3).\n"
+            "While trying to add entry:\n"
+            "'%4' / '%5'\n"
+            "Do you want to add it anyway?").arg(dupEntry.item()).arg(dupEntry.description()).arg(dupidx + 1).arg(userItem).arg(userDesc);
+      emit question(tr("Accept duplicate?"), msg, { ANS_YES, ANS_NO });
       return;
     }
-    
-    emit dbaseEntryAdded(dbase->entryCount());
-}
-
-void Backend::removeFromDatabase(const Operation op)
-{
-  if (!checkCurrentDatabase()) 
-  {
-    QLOGX("Current database unavailable!");
-    return;        
-  }
-  // return if no selection
-  else if ( dbaseSelection_.isEmpty() )
-  {
-    QLOG("Nothing selected, done");
-    return;
-  }
-  
-  if ( op == OP_INIT )
-  {
-    emit dbaseRemoveFromConfirm(tr("Remove item(s)"),
-                                tr("Are you sure you want to remove %1 items?").arg(dbaseSelection_.count()));
-  }
-  else if ( op == OP_PROCESS )
-  {
-    QList<int> dbIdxs = selectedDbaseIndexes();
-    Q_ASSERT(curDbase_);
-    const auto error = curDbase_->remove(dbIdxs);
-    if ( error == db::Error::OK )
-    {
-      emit dbaseEntriesRemoved(curDbase_->entryCount());
+    if (error == Error::OK) {
+      emit dbaseUpdated(curDbase_->entryCount());
+    } else {
+      QLOG("Unexpected error when adding entry to dbase: " << error);
     }
-    else
-    {
-      QLOG("Unexpected error: " << error);
-    }
-  }
-}
-
-
-void Backend::copyFromDatabase(const Backend::Operation op, bool move)
-{
-  if (!checkCurrentDatabase()) 
-  {
-    QLOGX("Current database unavailable!");
-    return;        
-  }
-  // return if no selection
-  else if ( dbaseSelection_.isEmpty() )
-  {
-    QLOG("Nothing selected, done");
-    return;
-  }
-  
-  if (op == OP_INIT) 
-  {
-    QString title, item, desc;
-    if (move) 
-      title = tr("Move item(s) to another database");
-    else 
-      title = tr("Copy item(s) to another database");
-    
-    if (dbaseSelection_.count() == 1) 
-    {
-      const auto idxs = selectedDbaseIndexes();
-      Q_ASSERT(idxs.count() == 1);
-      const int idx = idxs.front();
-      const Entry& entry = curDbase_->entry(idx);
-      item = entry.item();
-      desc = entry.description();
-    }
-    else 
-    {
-      item = desc = tr("-- multiple --");
-    }
-    
-    emit dbaseCopyMoveConfirm(title, item, desc, move);
-  }
-  else if ( op == OP_PROCESS ) 
-  {
-    QList<int> moveIdxs;
-    for (int curIdx : dbIdxs) {
-      const Entry &entry = curDbase_->entry( curIdx );
-      auto itemText = entry.item();
-      auto descText = entry.description();
-      
-      // if go-ahead given, ignore duplicates
-      if ( answer == QMessageBox::YesToAll ) {
-        Error error = target->add(itemText, descText, {}, true);
-        Q_ASSERT(error == Error::OK);
-        if ( move ) moveIdxs.append( curIdx );
+  } else if (curOp_ == OP_ENTRY_DEL) {
+    if (answer_ == ANS_YES) {
+      Q_ASSERT(!selection_.empty());
+      auto error = curDbase_->remove(selectedDbaseIndexes());
+      if (error != Error::OK) {
+        QLOG("Unexpected error when removing entry from dbase: " << error);
       }
-      else {
-        // don't ignore duplicates (yet)
-        Error error = target->add(itemText, descText, {}, false);
-        // check error type,
-        if (error == Error::OK) {
-          // in move mode, add index to successfully copied list for later removal from source
-          if ( move ) moveIdxs.append( curIdx );
-          continue;
-        }
-        // if duplicate detected, warn
-        else if ( error == Error::DUPLI && answer != QMessageBox::NoToAll ) {
-          const Entry &dupEntry = target->entry(error.index());
-          answer = QMessageBox::information(this, tr("Duplicate entry"),
-                                            tr("Possible duplicate found for '") + entry.item() + "' (" + entry.description() +
-                                            tr(") in target database: '") + dupEntry.item() + "' (" + dupEntry.description() +
-                                            tr("). Continue?"),
-                                            QMessageBox::Yes | QMessageBox::No | QMessageBox::YesToAll | QMessageBox::NoToAll);
-        }
-        
-        // retry item add with duplicates ignored on "yes" or "yes to all"
-        if ( answer == QMessageBox::Yes || answer == QMessageBox::YesToAll ) {
-          error = target->add(itemText, descText, {}, true);
-          if (error != Error::OK) {
-            QLOG("Unable to add to database despite ignoring duplicates?! (" << error.msg() << ")");
-            return;
-          }
-          if ( move ) moveIdxs.append( curIdx );
-        }
-      } // not YesToAll
-    } // iterate over input indexes        
-    
+    }
+    // TODO: reconsider focus point, maybe before first removed index?
+    emit dbaseUpdated(0);
   }
-  
 }
+  
+//void Backend::copyFromDatabase(const Backend::Operation op, bool move)
+//{
+//  if (!checkCurrentDatabase()) 
+//  {
+//    QLOGX("Current database unavailable!");
+//    return;        
+//  }
+//  // return if no selection
+//  else if ( dbaseSelection_.isEmpty() )
+//  {
+//    QLOG("Nothing selected, done");
+//    return;
+//  }
+  
+//  if (op == OP_INIT) 
+//  {
+//    QString title, item, desc;
+//    if (move) 
+//      title = tr("Move item(s) to another database");
+//    else 
+//      title = tr("Copy item(s) to another database");
+    
+//    if (dbaseSelection_.count() == 1) 
+//    {
+//      const auto idxs = selectedDbaseIndexes();
+//      Q_ASSERT(idxs.count() == 1);
+//      const int idx = idxs.front();
+//      const Entry& entry = curDbase_->entry(idx);
+//      item = entry.item();
+//      desc = entry.description();
+//    }
+//    else 
+//    {
+//      item = desc = tr("-- multiple --");
+//    }
+    
+//    emit dbaseCopyMoveConfirm(title, item, desc, move);
+//  }
+//  else if ( op == OP_PROCESS ) 
+//  {
+//    QList<int> moveIdxs;
+//    for (int curIdx : dbIdxs) {
+//      const Entry &entry = curDbase_->entry( curIdx );
+//      auto itemText = entry.item();
+//      auto descText = entry.description();
+      
+//      // if go-ahead given, ignore duplicates
+//      if ( answer == QMessageBox::YesToAll ) {
+//        Error error = target->add(itemText, descText, {}, true);
+//        Q_ASSERT(error == Error::OK);
+//        if ( move ) moveIdxs.append( curIdx );
+//      }
+//      else {
+//        // don't ignore duplicates (yet)
+//        Error error = target->add(itemText, descText, {}, false);
+//        // check error type,
+//        if (error == Error::OK) {
+//          // in move mode, add index to successfully copied list for later removal from source
+//          if ( move ) moveIdxs.append( curIdx );
+//          continue;
+//        }
+//        // if duplicate detected, warn
+//        else if ( error == Error::DUPLI && answer != QMessageBox::NoToAll ) {
+//          const Entry &dupEntry = target->entry(error.index());
+//          answer = QMessageBox::information(this, tr("Duplicate entry"),
+//                                            tr("Possible duplicate found for '") + entry.item() + "' (" + entry.description() +
+//                                            tr(") in target database: '") + dupEntry.item() + "' (" + dupEntry.description() +
+//                                            tr("). Continue?"),
+//                                            QMessageBox::Yes | QMessageBox::No | QMessageBox::YesToAll | QMessageBox::NoToAll);
+//        }
+        
+//        // retry item add with duplicates ignored on "yes" or "yes to all"
+//        if ( answer == QMessageBox::Yes || answer == QMessageBox::YesToAll ) {
+//          error = target->add(itemText, descText, {}, true);
+//          if (error != Error::OK) {
+//            QLOG("Unable to add to database despite ignoring duplicates?! (" << error.msg() << ")");
+//            return;
+//          }
+//          if ( move ) moveIdxs.append( curIdx );
+//        }
+//      } // not YesToAll
+//    } // iterate over input indexes        
+    
+//  }
+  
+//}
 
 Database* Backend::database(const QString &name) const {
   if ( name.isEmpty() ) return nullptr;
@@ -342,13 +378,14 @@ bool Backend::checkCurrentDatabase() {
 }
 
 void Backend::cleanupOperation() {
-  QLOG("Cleaning up operation (was: " << OP_NAME[curOp_] << ")");
+  QLOG("Cleaning up operation (was: " << OP_STR[curOp_] << ")");
   curOp_ = OP_NONE;
   answer_ = ANS_NONE;
   entryItem_.clear();
   entryDesc_.clear();
   itemName_.clear();
   text_.clear();
+  selection_.clear();
 }
 
 } //namespace app 

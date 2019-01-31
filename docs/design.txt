@@ -34,9 +34,9 @@ ui::slot_database_createClicked():
     name.empty() || !name.match(regex):
         MessageBox::warning();
         return;
-    backend.addDatabase(name);
+    backend.dbaseCreate(name);
 
-backend::addDatabase(name):
+backend::dbaseCreate(name):
     name.empty():
         return;
     db <- databases:
@@ -54,9 +54,9 @@ ui::slot_database_added(name):
 
 // [WYNN_1.3]
 ui::slot_database_saveClicked()
-    backend.saveDatabase();
+    backend.dbaseSave();
 
-backend::saveDatabase():
+backend::dbaseSave():
     curDbase.save();
     status("Saved to ...") -> ui::slot_backend_status();
 
@@ -69,9 +69,9 @@ ui::slot_database_deleteClicked():
     name.empty():
         return;
     MessageBox("You sure?") == YES:
-        backend.deleteDatabase();
+        backend.dbaseDelete();
 
-backend::deleteDatabase():
+backend::dbaseDelete():
     checkCurrentDatabase():
         return;
     file = curDbase.path();
@@ -118,14 +118,14 @@ backend::entry(item, desc):
 // TODO: do actual work on a worker thread?
 backend::continueOperation():
     curOp == ENTRY_ADD:
-        answer == CANCEL: 
+        answer == NO: 
             cleanupOperation(); 
             return;
         answer == YES || YESALL: dupIgnore = true;
         error = curDbase.add(entryItem, entryDesc, dupIgnore);
         error == DUPLICATE: 
             question("Accept duplicate?", "blahblah", 
-                    YES | NO | CANCEL) -> ui::slot_backend_question()
+                    YES | NO) -> ui::slot_backend_question()
             return;
         dbaseUpdated(idx) -> ui::slot_backend_dbaseUpdated();
         return;
@@ -208,7 +208,8 @@ backend::dbaseEntryRemove(selection):
     cleanupOperation();
     curOp = ENTRY_DEL;
     dbSelection = selection;
-    signal_question("Delete 123 item(s)?", "blabla", YES | NO);
+    question("Delete 123 item(s)?", "blabla", YES | NO) 
+        -> ui::slot_backend_question();
 
 // [WYNN_1.7]
 ui::slot_database_copyClicked():
@@ -225,10 +226,17 @@ backend::dbaseEntryCopy(selection, move):
     else: 
         curOp = ENTRY_COPY;
     dbSelection = selection;
-    selection("Select target", "blabla", dbNames) -> ui::slot_backend_selection();
+    db <- databases && db != curDbase:
+        dbNames += db.name();
+    dbNames.empty():
+        error("Nothing to copy/move to!") -> ui::slot_backend_error()
+    item("Select target", "blabla", dbNames) -> ui::slot_backend_item();
 
- ui::slot_backend_selection(title, msg, items):
-    ans = InputDialog::select(title, msg, items);
+ui::slot_backend_error(msg):
+    MsgBox::critical(msg);
+
+ ui::slot_backend_item(title, msg, items):
+    ans = InputDialog::item(title, msg, items);
     backend.item(ans);
 
 backend::item(name):
