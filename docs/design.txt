@@ -237,9 +237,11 @@ ui::slot_backend_error(msg):
 
  ui::slot_backend_item(title, msg, items):
     ans = InputDialog::item(title, msg, items);
-    backend.item(ans);
+    backend.setItem(ans);
 
-backend::item(name):
+backend::setItem(name):
+    name.empty():
+        return;
     itemName = name;
     continueOperation();
 

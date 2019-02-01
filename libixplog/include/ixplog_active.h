@@ -12,6 +12,7 @@
 #include <sstream>
 
 //#define QLOG_INDENT_DEBUG // enable indent debugging mode, useful when indentation is broken
+// TODO: error, warning, info... macros
 
 class QSize;
 class QPoint;

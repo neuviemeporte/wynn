@@ -70,6 +70,7 @@ public:
     int findEntry(const QString &text, int startIndex = 0) const;
     int findDuplicate(const Entry &entry, int exceptIdx = -1) const;
     
+    // TODO: accept Entry refs instead of raw strings, support move semantics
     Error add(const QString &item, const QString &desc, const QUuid &uuid = {}, const bool dupIgnore = false) override;
     Error remove(int idx) override;
     Error remove(const QList<int> &idxs) override;

@@ -32,6 +32,7 @@ public:
     const QString msg() const { return msg_; }
     int index() const { return index_; }
     
+    // TODO: operator Type() instead
     bool operator==(const Type type) const { return type_ == type; }
     bool operator!=(const Type type) const { return !(*this == type); }
 };

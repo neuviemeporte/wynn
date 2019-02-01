@@ -268,7 +268,7 @@ void MainForm::slot_backend_question(const QString &title, const QString &msg, c
 
 void MainForm::slot_backend_item(const QString &title, const QString &msg, const QStringList &options) {
   const auto item = QInputDialog::getItem(this, title, msg, options);
-  
+  backend_->setItem(item);
 }
 
 void MainForm::slot_backend_dbaseEntry(const QString &title, const QString &item, const QString &desc) {
@@ -543,88 +543,95 @@ void MainForm::slot_database_moveClicked() {
   backend_->dbaseEntryCopy(selection, true);
 }
 
-void MainForm::slot_database_editClicked()
-{
-  QLOG("Database edit button clicked");
-  if ( !curDbase_ ) {
-    popDbaseMissing();
+void MainForm::slot_database_editClicked() {
+  QLOGX("Database edit button clicked");
+  const auto selection = ui_.databaseTable->selectionModel()->selectedRows();
+  if (selection.empty()) {
+    QLOG("Nothing selected in database table!");
+    QMessageBox::information(this, tr("Nothing selected"), tr("No entries selected in database table for editing!"));
     return;
-  }
-  
-  if ( curDbase_->locked() )  { 
-    popDbaseLocked(); 
-    return; 
-  }
-  
-  // setup database entry dialog, disable editing, enable combobox
-  setupDbaseDialogCombo(true, true);
-  dbaseDialogUI_.dbaseCombo->setEnabled(false);
-  dbaseDialogUI_.entryEdit->setEnabled(true);
-  dbaseDialogUI_.entryEdit->setFocus(Qt::OtherFocusReason);
-  dbaseDialogUI_.descEdit->setEnabled(true);
-  dbaseDialog_->setWindowTitle("Edit item");
-  QList<int> dbIdxs = getSelectedDbaseTableIdxs();
-  
-  if (dbIdxs.isEmpty()) {
-    QMessageBox::information(this, tr("Information"), tr("No entry selected in database for editing.\nPlease select something and try again"));
-    return;
-  }
-  else if (dbIdxs.size() > 1)	{
-    QMessageBox::information(this, tr("Information"), tr("Cannot edit more than one entry at a time.\nPlease select single entry and try again"));
-    return;
-  }
-  
-  int idx = dbIdxs.first();
-  QLOG("Selected index: " << idx);
-  const Entry &e = curDbase_->entry(idx);
-  
-  dbaseDialogUI_.entryEdit->setText(e.item());
-  dbaseDialogUI_.descEdit->setText(e.description());
-  
-  // pop dialog for user to enter changes and do stuff if ok pressed
-  if (dbaseDialog_->exec() != QDialog::Accepted) {
-    QLOG("User changes rejected");
-    return;
-  }
-  
-  const QString
-      newitem = dbaseDialogUI_.entryEdit->text(),
-      newdesc = dbaseDialogUI_.descEdit->text();
-  
-  if ( newitem.isEmpty() || newdesc.isEmpty() ) {
-    QMessageBox::information(this, tr("Missing input"), tr("Database entries can't have empty fields."));
-    return;
-  }
-  
-  QLOG("User changes accepted");
-  Error error = curDbase_->alter(idx, newitem, newdesc);
-  if (error == Error::DUPLI)
-  {
-    QMessageBox::StandardButton button;
-    int dupidx = error.index();
-    const Entry &dupEntry = curDbase_->entry(dupidx);
-    button = QMessageBox::question(this, tr("Possible duplicate"), 
-                                   tr("A similar entry was found to already exist in the database:\n'")
-                                   + dupEntry.item() + "' / '" + dupEntry.description() + "' (" + QString::number(dupidx + 1) 
-                                   + tr(").\nWhile trying to replace entry (") + QString::number(idx + 1) 
-                                   + tr(") with:\n'") + newitem + "' / '" + newdesc
-                                   + tr("'\nDo you want to replace it anyway?"), QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-    if (button == QMessageBox::Yes)
-    {
-      QLOG("User wants to replace anyway");
-      Error error = curDbase_->alter(idx, newitem, newdesc, true);
-      QLOG("Result: " << QString::number(error.type()));
-      Q_ASSERT(error == Error::OK);
-    }
-    else
-    {
-      QLOG("User doesn't want duplicate");
-      return;
-    }
-  }
-  
-  ui_.databaseTable->setFocus(Qt::OtherFocusReason);
+  }  
+  backend_->dbaseEntryEdit(selection);
 }
+  
+//  if ( !curDbase_ ) {
+//    popDbaseMissing();
+//    return;
+//  }
+  
+//  if ( curDbase_->locked() )  { 
+//    popDbaseLocked(); 
+//    return; 
+//  }
+  
+//  // setup database entry dialog, disable editing, enable combobox
+//  setupDbaseDialogCombo(true, true);
+//  dbaseDialogUI_.dbaseCombo->setEnabled(false);
+//  dbaseDialogUI_.entryEdit->setEnabled(true);
+//  dbaseDialogUI_.entryEdit->setFocus(Qt::OtherFocusReason);
+//  dbaseDialogUI_.descEdit->setEnabled(true);
+//  dbaseDialog_->setWindowTitle("Edit item");
+//  QList<int> dbIdxs = getSelectedDbaseTableIdxs();
+  
+//  if (dbIdxs.isEmpty()) {
+//    QMessageBox::information(this, tr("Information"), tr("No entry selected in database for editing.\nPlease select something and try again"));
+//    return;
+//  }
+//  else if (dbIdxs.size() > 1)	{
+//    QMessageBox::information(this, tr("Information"), tr("Cannot edit more than one entry at a time.\nPlease select single entry and try again"));
+//    return;
+//  }
+  
+//  int idx = dbIdxs.first();
+//  QLOG("Selected index: " << idx);
+//  const Entry &e = curDbase_->entry(idx);
+  
+//  dbaseDialogUI_.entryEdit->setText(e.item());
+//  dbaseDialogUI_.descEdit->setText(e.description());
+  
+//  // pop dialog for user to enter changes and do stuff if ok pressed
+//  if (dbaseDialog_->exec() != QDialog::Accepted) {
+//    QLOG("User changes rejected");
+//    return;
+//  }
+  
+//  const QString
+//      newitem = dbaseDialogUI_.entryEdit->text(),
+//      newdesc = dbaseDialogUI_.descEdit->text();
+  
+//  if ( newitem.isEmpty() || newdesc.isEmpty() ) {
+//    QMessageBox::information(this, tr("Missing input"), tr("Database entries can't have empty fields."));
+//    return;
+//  }
+  
+//  QLOG("User changes accepted");
+//  Error error = curDbase_->alter(idx, newitem, newdesc);
+//  if (error == Error::DUPLI)
+//  {
+//    QMessageBox::StandardButton button;
+//    int dupidx = error.index();
+//    const Entry &dupEntry = curDbase_->entry(dupidx);
+//    button = QMessageBox::question(this, tr("Possible duplicate"), 
+//                                   tr("A similar entry was found to already exist in the database:\n'")
+//                                   + dupEntry.item() + "' / '" + dupEntry.description() + "' (" + QString::number(dupidx + 1) 
+//                                   + tr(").\nWhile trying to replace entry (") + QString::number(idx + 1) 
+//                                   + tr(") with:\n'") + newitem + "' / '" + newdesc
+//                                   + tr("'\nDo you want to replace it anyway?"), QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+//    if (button == QMessageBox::Yes)
+//    {
+//      QLOG("User wants to replace anyway");
+//      Error error = curDbase_->alter(idx, newitem, newdesc, true);
+//      QLOG("Result: " << QString::number(error.type()));
+//      Q_ASSERT(error == Error::OK);
+//    }
+//    else
+//    {
+//      QLOG("User doesn't want duplicate");
+//      return;
+//    }
+//  }
+  
+//  ui_.databaseTable->setFocus(Qt::OtherFocusReason);
 
 void MainForm::slot_database_findClicked()
 {

@@ -9,6 +9,7 @@
 #include <QList>
 #include <QString>
 #include <QSortFilterProxyModel>
+#include <list>
 
 namespace wynn {
 namespace app {
@@ -33,7 +34,7 @@ private:
   Operation curOp_;
   Answer answer_;
   QString entryItem_, entryDesc_, itemName_, text_;
-  QModelIndexList selection_;
+  std::list<int> selection_;
   
 public:
   Backend();
@@ -50,6 +51,7 @@ public:
   void dbaseEntryAdd();
   void dbaseEntryRemove(const QModelIndexList &selection);
   void dbaseEntryCopy(const QModelIndexList &selection, const bool move);
+  void dbaseEntryEdit(const QModelIndexList &selection);
   
 signals:
   void warning(const QString &title, const QString &msg);
@@ -73,10 +75,11 @@ protected:
   db::Database* database(const QString &name) const;
   QString dbasePath(const db::Database *db) const;
   void notify(const Notification type);
-  QList<int> selectedDbaseIndexes();
+  std::list<int> mapToDatabase(const QModelIndexList &model, const bool sort);
   bool checkCurrentDatabase();
   void cleanupOperation();
   void continueOperation();
+  bool handleDuplicate(const db::Database *dbase, const db::Error &error, const QString &item, const QString &desc);
 };
 
 } // namespace app
