@@ -136,37 +136,39 @@ backend::continueOperation():
             error();
 
         dbaseUpdated(idx) -> ui::slot_backend_dbaseUpdated();
-    curOp == ENTRY_COPY || ENTRY_MOVE || ENTRY_EDIT:
+    curOp == ENTRY_COPY || ENTRY_MOVE
         target = databases(itemName);
         idx <- dbSelection:
             answer == CANCEL: break;
             answer != NO:
-                answer == YES || YESALL: dupIgnore = true;
-                curOp == ENTRY_EDIT:
-                    error = target.alter(index, entryItem, entryDesc, dupIgnore);
-                else:
-                    entry = curDbase.entry(idx);
-                    error = target.add(entry, dupIgnore);
-
+                answer == YES || YESALL: 
+                    dupIgnore = true;
+                entry = curDbase.entry(idx);
+                error = target.add(entry, dupIgnore);
                 // ask about duplicate unless already answered no
-                error == DUPLICATE && answer != NO || NOALL: 
-                    question("Accept duplicate?", "blabla", 
-                        YES | NO | YESALL | NOALL | CANCEL) 
-                            -> ui::slot_backend_question(); 
+                handleDuplicate(target, error, entry): 
                     return; // will retry same entry next time around
-
-                curOp == ENTRY_MOVE && error == OK: 
-                    curDbase.remove(idx);
-            
+                error == OK && curOp == ENTRY_MOVE: 
+                    curDbase.remove(idx):
             answer == YES || NO: 
                 answer = NONE; // yes/no answer good only for one iteration
-
             dbSelection.remove(idx);
-            curOp == ENTRY_EDIT:
-                // pop next dialog for editing
-                dbaseEntry(dbSelection.front()) 
-                    -> ui::slot_backend_dbaseEntry(); 
-                return; 
+    curOp == ENTRY_EDIT:
+        answer == NO:
+            return; // user canceled entry Dialog
+        answer == YES:
+            dupIgnore = true;
+        alterIdx = dbSelection.front();
+        error = curDbase.alter(alterIdx, entryItem, entryDesc);
+        handleDuplicate(curDbase, error, entry):
+            return;
+        error != OK:
+            return;
+        answer == YES || NO: 
+            answer = NONE; // yes/no answer good only for one iteration
+        dbSelection.pop_front();
+        !dbSelection.empty(): // let user edit next entry
+            emit dbaseEntry(dbSelection.front())
     curOp == ENTRY_FIND:
         idx = dbSelection.front();
         found = curDbase.findEntry(text, idx);
@@ -177,6 +179,11 @@ backend::continueOperation():
         dbaseFound(found) -> ui::slot_backend_dbaseEntryFound();
     else: 
         error(); // no operation to continue
+
+backend::handleDuplicate(target, error, entry): 
+    error != DUPLI || answer == NOALL:
+        return;
+    question("Accept duplicate?", entry, { YES | NO }) -> ui.slot_backend_question()
 
 backend::cleanupOperation():
     curOp = NONE;

@@ -125,7 +125,8 @@ MainForm::MainForm(ExtBackend *backend) : QMainWindow(nullptr),
   connect(backend_, SIGNAL(error(QString, QString)), this, SLOT(slot_backend_error(QString, QString)));
   connect(backend_, SIGNAL(status(QString)), this, SLOT(slot_backend_status(QString));
   connect(backend_, SIGNAL(question(QString, QString, QVector<Backend::Answer>)), this, SLOT(slot_backend_question(QString, QString, QVector<Backend::Answer>)));
-  connect(backend_, SIGNAL(item(QString, QString, QStringList)), this, SLOT(slot_backend_item(QString,QString,QStringList)));
+  connect(backend_, SIGNAL(getItem(QString, QString, QStringList)), this, SLOT(slot_backend_getItem(QString,QString,QStringList)));
+  connect(backend_, SIGNAL(getText(QString, QString)), this, SLOT(slot_backend_getText(QString,QString)));
   connect(backend_, SIGNAL(dbaseItemCount(const int)), this, SLOT(slot_database_countUpdate(const int)));
   connect(backend_, SIGNAL(dbaseAdded(const QString &)), this, SLOT(slot_database_added(const QString&)));
   connect(backend_, SIGNAL(dbaseRemoved(const QString&)), this, SLOT(slot_database_removed(const QString&)));
@@ -187,14 +188,10 @@ MainForm::MainForm(ExtBackend *backend) : QMainWindow(nullptr),
 MainForm::~MainForm()
 {
   QLOG("MainForm destructor active");
-  
   saveSettings();
-  
-  
   // Need to remove all dictionary widgets from the dictionary panel manually before destroying plugins,
   // because plugins are supposed to dispose of these widgets themselves.
   clearPluginStacks(false);
-  
   delete APP_LOGSTREAM;
 }
 
@@ -266,9 +263,16 @@ void MainForm::slot_backend_question(const QString &title, const QString &msg, c
   backend_->setAnswer(ans);
 }
 
-void MainForm::slot_backend_item(const QString &title, const QString &msg, const QStringList &options) {
+void MainForm::slot_backend_getItem(const QString &title, const QString &msg, const QStringList &options) {
   const auto item = QInputDialog::getItem(this, title, msg, options);
-  backend_->setItem(item);
+  backend_->setResponse(item);
+}
+
+void MainForm::slot_backend_getText(const QString &title, const QString &msg)
+{
+  static QString persistValue;
+  persistValue = QInputDialog::getText(this, title, msg, QLineEdit::Normal, persistValue);
+  backend_->setResponse(persistValue);
 }
 
 void MainForm::slot_backend_dbaseEntry(const QString &title, const QString &item, const QString &desc) {
@@ -554,157 +558,27 @@ void MainForm::slot_database_editClicked() {
   backend_->dbaseEntryEdit(selection);
 }
   
-//  if ( !curDbase_ ) {
-//    popDbaseMissing();
-//    return;
-//  }
-  
-//  if ( curDbase_->locked() )  { 
-//    popDbaseLocked(); 
-//    return; 
-//  }
-  
-//  // setup database entry dialog, disable editing, enable combobox
-//  setupDbaseDialogCombo(true, true);
-//  dbaseDialogUI_.dbaseCombo->setEnabled(false);
-//  dbaseDialogUI_.entryEdit->setEnabled(true);
-//  dbaseDialogUI_.entryEdit->setFocus(Qt::OtherFocusReason);
-//  dbaseDialogUI_.descEdit->setEnabled(true);
-//  dbaseDialog_->setWindowTitle("Edit item");
-//  QList<int> dbIdxs = getSelectedDbaseTableIdxs();
-  
-//  if (dbIdxs.isEmpty()) {
-//    QMessageBox::information(this, tr("Information"), tr("No entry selected in database for editing.\nPlease select something and try again"));
-//    return;
-//  }
-//  else if (dbIdxs.size() > 1)	{
-//    QMessageBox::information(this, tr("Information"), tr("Cannot edit more than one entry at a time.\nPlease select single entry and try again"));
-//    return;
-//  }
-  
-//  int idx = dbIdxs.first();
-//  QLOG("Selected index: " << idx);
-//  const Entry &e = curDbase_->entry(idx);
-  
-//  dbaseDialogUI_.entryEdit->setText(e.item());
-//  dbaseDialogUI_.descEdit->setText(e.description());
-  
-//  // pop dialog for user to enter changes and do stuff if ok pressed
-//  if (dbaseDialog_->exec() != QDialog::Accepted) {
-//    QLOG("User changes rejected");
-//    return;
-//  }
-  
-//  const QString
-//      newitem = dbaseDialogUI_.entryEdit->text(),
-//      newdesc = dbaseDialogUI_.descEdit->text();
-  
-//  if ( newitem.isEmpty() || newdesc.isEmpty() ) {
-//    QMessageBox::information(this, tr("Missing input"), tr("Database entries can't have empty fields."));
-//    return;
-//  }
-  
-//  QLOG("User changes accepted");
-//  Error error = curDbase_->alter(idx, newitem, newdesc);
-//  if (error == Error::DUPLI)
-//  {
-//    QMessageBox::StandardButton button;
-//    int dupidx = error.index();
-//    const Entry &dupEntry = curDbase_->entry(dupidx);
-//    button = QMessageBox::question(this, tr("Possible duplicate"), 
-//                                   tr("A similar entry was found to already exist in the database:\n'")
-//                                   + dupEntry.item() + "' / '" + dupEntry.description() + "' (" + QString::number(dupidx + 1) 
-//                                   + tr(").\nWhile trying to replace entry (") + QString::number(idx + 1) 
-//                                   + tr(") with:\n'") + newitem + "' / '" + newdesc
-//                                   + tr("'\nDo you want to replace it anyway?"), QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-//    if (button == QMessageBox::Yes)
-//    {
-//      QLOG("User wants to replace anyway");
-//      Error error = curDbase_->alter(idx, newitem, newdesc, true);
-//      QLOG("Result: " << QString::number(error.type()));
-//      Q_ASSERT(error == Error::OK);
-//    }
-//    else
-//    {
-//      QLOG("User doesn't want duplicate");
-//      return;
-//    }
-//  }
-  
-//  ui_.databaseTable->setFocus(Qt::OtherFocusReason);
-
-void MainForm::slot_database_findClicked()
-{
-  QLOG("Database find button clicked");
-  if ( !curDbase_ ) {
-    popDbaseMissing();
-    return;
-  }
-  
-  bool ok = false;
-  const auto text = QInputDialog::getText(
-        this, tr("Find item in database"), tr("Please enter an expression to search for:"),
-        QLineEdit::Normal, dbaseFindText_, &ok);
-  
-  if ( !ok || text.isEmpty() ) {
-    QLOG("Find dialog not accepted");
-    return;
-  }
-  
-  QLOG("Starting search for text: " << text);
-  // store search text for next searches of the same item
-  dbaseFindText_ = text;
-  // get index of first selected row, or 0 (start of table) if none selected. search will start from this row.
-  QList<int> dbIdxs = getSelectedDbaseTableIdxs();
-  int idx = 0;
-  if (!dbIdxs.empty()) idx = dbIdxs.first();
-  // point to next row over selected one to enable for consecutive searches on the same term without getting stuck
-  idx++;
-  // if this will point to the last row in the table search from the top instead
-  if (idx >= curDbase_->entryCount()) idx = 0;
-  
-  int found = curDbase_->findEntry(text, idx);
-  
-  // last resort to get a match if search started from somewhere in the table, not the beggining
-  if (found < 0 && idx != 0) {
-    QLOG("Last resort search from the top");
-    found = curDbase_->findEntry(text, 0);
-  }
-  if (found < 0) {
-    QLOG("Nothing found.");
-    QMessageBox::information(this, tr("No results"), tr("Sorry, no results were found for '") + text + "'");
-    
-  }
-  else {
-    QModelIndex pidx = dbaseProxyModel_.mapFromSource(dbaseModel_->index(found, 0));
-    QLOG("Found dbase idx: " << found << ", proxy: " << pidx.row());
-    ui_.databaseTable->selectRow(pidx.row());
-    ui_.databaseTable->setFocus(Qt::OtherFocusReason);
-  }
+void MainForm::slot_database_findClicked() {
+  QLOGX("Database find button clicked");
+  const auto selection = ui_.databaseTable->selectionModel()->selectedRows();
+  backend_->dbaseEntryFind(selection);
 }
 
-void MainForm::slot_database_exportClicked()
-{
+void MainForm::slot_database_exportClicked() {
   QLOG("Database export button clicked");
-  if ( !curDbase_ ) {
-    popDbaseMissing();
-    return;
-  }
-  
-  QString fname = QFileDialog::getSaveFileName(this, tr("Export database"), QDir::homePath(), tr("HTML (*.htm *.html)"));
-  if ( fname.isEmpty() ) {
+  const QString path = QFileDialog::getSaveFileName(this, tr("Export database"), QDir::homePath(), "HTML (*.htm *.html)");
+  if ( path.isEmpty() ) {
     QLOG("No file selected to save");
     return;
   }
-  else {
-    if (! (fname.endsWith(".htm", Qt::CaseInsensitive) || fname.endsWith(".html", Qt::CaseInsensitive))) 
-      fname.append(".html");
-    
-    QLOG("Exporting to file: '" << fname << "'");
-    QList<int> idxs = getSelectedDbaseTableIdxs();
-    bool ok = curDbase_->htmlExport(fname, idxs);
-    if (!ok) QMessageBox::information(this, tr("Unable to export"), tr("Couldn't open file for writing: '") + fname + "'.");
-  }
+  
+  if (! (path.endsWith(".htm", Qt::CaseInsensitive) || path.endsWith(".html", Qt::CaseInsensitive))) 
+    path.append(".html");
+  
+  QLOG("Exporting to file: '" << path << "'");
+  
+  const auto selection = ui_.databaseTable->selectionModel()->selectedRows();
+  backend_->dbaseExport(selection, path);
 }
 
 void MainForm::slot_database_resetClicked() {

@@ -88,7 +88,7 @@ public:
     void loadXMLExtraElements(QXmlStreamReader &xml, const QString &name) override;
     Error loadXmlPostCheck() override { return Error::OK; }
 
-    bool htmlExport(const QString &path, const QList<int> &idxs);
+    bool htmlExport(const QString &path, std::list<int> &idxs);
     
 signals:
     void countUpdate();

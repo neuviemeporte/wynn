@@ -33,7 +33,7 @@ private:
   db::Quiz *quiz_;
   Operation curOp_;
   Answer answer_;
-  QString entryItem_, entryDesc_, itemName_, text_;
+  QString entryItem_, entryDesc_, response_;
   std::list<int> selection_;
   
 public:
@@ -42,7 +42,7 @@ public:
   
   void setEntry(const QString &item, const QString &desc);
   void setAnswer(const Answer ans);
-  void setItem(const QString &item);
+  void setResponse(const QString &item);
   
   void dbaseSwitch(const QString &name);
   void dbaseCreate(const QString &name);
@@ -52,13 +52,16 @@ public:
   void dbaseEntryRemove(const QModelIndexList &selection);
   void dbaseEntryCopy(const QModelIndexList &selection, const bool move);
   void dbaseEntryEdit(const QModelIndexList &selection);
+  void dbaseEntryFind(const QModelIndexList &selection);
+  void dbaseExport(const QModelIndexList &selection, const QString &path);
   
 signals:
   void warning(const QString &title, const QString &msg);
   void error(const QString &title, const QString &msg);
   void status(const QString &msg);
   void question(const QString &title, const QString &msg, const QVector<Answer> &options);
-  void item(const QString &title, const QString &msg, const QStringList &options);
+  void getItem(const QString &title, const QString &msg, const QStringList &options);
+  void getText(const QString &title, const QString &msg);
   
   void dbaseItemCount(int count);
   void dbaseAdded(const QString &name);

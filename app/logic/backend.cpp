@@ -43,6 +43,9 @@ static const QString
   TITLE_ENTRYDEL = tr("Delete items?"),
   TITLE_TARGET = tr("Select target"),
   TITLE_EDIT = tr("Edit item"),
+  TITLE_FIND = tr("Find item in database"),
+  TITLE_FIND_FAIL = tr("No results"), 
+  TITLE_EXPORT_FAIL = tr("Unable to export"), 
   MSG_DUPLICATE = tr(
       "A similar entry was found to already exist in the database:\n"
       "'%1' / '%2' (%3).\n"
@@ -52,7 +55,11 @@ static const QString
   MSG_ENTRYDEL = tr("Are you sure you want to remove %1 items from database '%2'?"),
   MSG_NOTARGET = tr("No eligible target database exists. Create one and retry."),
   MSG_MOVE = tr("Move %1 entries to database:"),
-  MSG_COPY = tr("Copy %1 entries to database:");
+  MSG_COPY = tr("Copy %1 entries to database:"),
+  MSG_FIND = tr("Please enter an expression to search for:"),
+  MSG_FIND_FAIL = tr("Sorry, no results were found for '%1'."),
+  MSG_EXPORT_SUCCESS = tr("Exported database to '%1'"),
+  MSG_EXPORT_FAIL = tr("Couldn't open file for writing: '%1'.");
 
 Backend::Backend() : QObject(),
   curDbase_(nullptr), 
@@ -89,13 +96,13 @@ void Backend::setAnswer(const Backend::Answer ans) {
   continueOperation();
 }
 
-void Backend::setItem(const QString &item) {
+void Backend::setResponse(const QString &item) {
   QLOGX("Setting item: " << item << ", current operation: " << OP_STR[curOp_]);
   if (item.isEmpty()) {
     QLOG("No item selected, canceling operation");
     return;
   }
-  itemName_ = item;
+  response_ = item;
   continueOperation();
 }
 
@@ -206,11 +213,10 @@ void Backend::dbaseEntryCopy(const QModelIndexList &selection, const bool move) 
   }
   
   const QString &msg = (move ? MSG_MOVE : MSG_COPY);
-  emit item(TITLE_TARGET, msg.arg(selection.count()), dbNames);
+  emit getItem(TITLE_TARGET, msg.arg(selection.count()), dbNames);
 }
 
-void Backend::dbaseEntryEdit(const QModelIndexList &selection)
-{
+void Backend::dbaseEntryEdit(const QModelIndexList &selection) {
   if (!checkCurrentDatabase()) return;
   if (selection.empty()) {
     QLOGX("Selection is empty!");
@@ -223,6 +229,28 @@ void Backend::dbaseEntryEdit(const QModelIndexList &selection)
   Q_ASSERT(curDbase_);
   const auto &entry = curDbase_->entry(selection_.front());
   emit dbaseEntry(TITLE_EDIT, entry.item(), entry.description());
+}
+
+void Backend::dbaseEntryFind(const QModelIndexList &selection) {
+  if (!checkCurrentDatabase()) return;
+  cleanupOperation();
+  curOp_ = OP_ENTRY_FIND;
+  selection_ = mapToDatabase(selection, false);
+  emit getText(TITLE_FIND, MSG_FIND);
+}
+
+void Backend::dbaseExport(const QModelIndexList &selection, const QString &path) {
+ if (!checkCurrentDatabase()) return;
+ Q_ASSERT(curDbase_);
+ selection_ = mapToDatabase(selection, false);
+ if (!curDbase_->htmlExport(path, selection_)) {
+   QLOG("Failed to export to html file");
+   emit warning(TITLE_EXPORT_FAIL, MSG_EXPORT_FAIL.arg(path));
+ }
+ else {
+   QLOG("Export successful");
+   emit status(MSG_EXPORT_SUCCESS.arg(path));
+ }
 }
 
 // TODO: execute actual work on separate thread
@@ -242,6 +270,7 @@ void Backend::continueOperation() {
       return;
     
     if (error == Error::OK) {
+      // TODO: mapToModel()
       emit dbaseUpdated(curDbase_->entryCount());
     } else {
       QLOG("Unexpected error when adding entry to dbase: " << error);
@@ -258,7 +287,7 @@ void Backend::continueOperation() {
     // TODO: reconsider focus point, maybe before first removed index?
     emit dbaseUpdated(0);
   } else if (curOp_ == OP_ENTRY_COPY || curOp_ == OP_ENTRY_MOVE) {
-    auto target = database(itemName_);
+    auto target = database(response_);
     Q_ASSERT(curDbase_);
     Q_ASSERT(target);
     Q_ASSERT(!selection_.empty());
@@ -266,18 +295,19 @@ void Backend::continueOperation() {
     for (auto it = selection_.begin(); it != selection_.end();) {
       const int idx = *it;
       QLOG("Processing index: " << idx << ", answer = " << ANS_STR[answer_]);
+      // TODO: rollback previous steps in case of cancel
       if (answer_ == ANS_CANCEL) {
         QLOG("Operation canceled by user");
         break;
       }
       // when user answered "no", skip copy/move
       if (answer_ != ANS_NO) {
-        bool dupIgnore = (answer_ == ANS_YES || ANS_YESALL);
-        auto entry = curDbase_->entry(idx);
+        const bool dupIgnore = (answer_ == ANS_YES || ANS_YESALL);
+        const auto &entry = curDbase_->entry(idx);
         // try to add entry to target database
-        auto addError = target->add(entry.item(), entry.description(), {}, dupIgnore);
+        const auto addError = target->add(entry.item(), entry.description(), {}, dupIgnore);
         // ask user about handling of duplicate unless they already answered "no to all"
-        if (answer_ != ANS_NOALL && handleDuplicate(target, error, entry.item(), entry.description())) 
+        if (handleDuplicate(target, error, entry.item(), entry.description())) 
           return;
         // remove entry from source database when add to target successful and we are in move mode
         // TODO: implement move operation as atomic on database level
@@ -293,15 +323,66 @@ void Backend::continueOperation() {
       // remove index processed in this iteration from list
       it = selection_.erase(it);
     }
+    QLOG("Done with copy/move operation");
   } else if (curOp_ == OP_ENTRY_EDIT) {
+    if (answer_ == ANS_NO) {
+      QLOG("User cancelled entry dialog, interrupting edit operation");
+      return;
+    }
+    Q_ASSERT(!selection_.empty());
+    Q_ASSERT(curDbase_);
+    const int alterIdx = selection_.front();
+    const bool dupIgnore = (answer_ == ANS_YES);
+    const auto error = curDbase_->alter(alterIdx, entryItem_, entryDesc_, dupIgnore);
+    if (handleDuplicate(curDbase_, error, entryItem_, entryDesc_)) {
+      QLOG("Asked user about duplicate, might retry later");
+      return;
+    }
+    else if (error != db::Error::OK) {
+      QLOG("Unexpected error while altering entry: " << error);
+      return;
+    }
     
+    if (answer_ == ANS_YES || answer_ == ANS_NO) answer_ = ANS_NONE;
+    selection_.pop_front();
+    // show user next entry to edit
+    if (!selection_.empty()) {
+      const auto &entry = curDbase_->entry(selection_.front());
+      emit dbaseEntry(TITLE_EDIT, entry.item(), entry.description());
+    }
+    else {
+      QLOG("Done with edit operation");
+      emit dbaseUpdated(alterIdx);
+    }
+  } else if (curOp_ == OP_ENTRY_FIND) {
+    Q_ASSERT(curDbase_);
+    const int startIdx = (selection_.empty() ? 0 : selection_.front() + 1);
+    // first iteration, try searching from current position onwards
+    // TODO: this doesn't make sense due to dbase view sorting, change implementation
+    // to search and return matches in bulk, return results to UI and add controls for
+    // jumping between them
+    int found = curDbase_->findEntry(response_, startIdx);
+    if (found < 0 && startIdx != 0) {
+      QLOG("Nothing found, try again from beginning");
+      found = curDbase_->findEntry(response_, 0);
+    }
+    if (found < 0) {
+      QLOG("Nothing found second time around, giving up");
+      emit warning(TITLE_FIND_FAIL, MSG_FIND_FAIL.arg(response_));
+    }
+    else {
+      const int row = dbaseProxyModel_->mapFromSource(dbaseModel_->index(found, 0)).row();
+      QLOG("Found matching result at index " << found << " -> row " << row);
+      emit dbaseUpdated(row);
+    }
+  } else {
+    QLOG("Unsupported operation: " << curOp_);
   }
-  
 }
 
 bool Backend::handleDuplicate(const Database *dbase, const db::Error &error, const QString &item, const QString &desc)
 {
-  if (error != db::Error::DUPLI)
+  if (error != db::Error::DUPLI || answer_ == ANS_NOALL)
     return false;
   
   const int dupIdx = error.index();
@@ -463,8 +544,7 @@ void Backend::cleanupOperation() {
   answer_ = ANS_NONE;
   entryItem_.clear();
   entryDesc_.clear();
-  itemName_.clear();
-  text_.clear();
+  response_.clear();
   selection_.clear();
 }
 

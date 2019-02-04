@@ -66,7 +66,8 @@ public slots:
   void slot_backend_error(const QString &title, const QString &msg);
   void slot_backend_status(const QString &msg);
   void slot_backend_question(const QString &title, const QString &msg, const QVector<Backend::Answer> &options);
-  void slot_backend_item(const QString &title, const QString &msg, const QStringList &options);
+  void slot_backend_getItem(const QString &title, const QString &msg, const QStringList &options);
+  void slot_backend_getText(const QString &title, const QString &msg);
   void slot_backend_dbaseEntry(const QString &title, const QString &item, const QString &desc);
   
   // dictionary panel

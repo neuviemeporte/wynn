@@ -337,23 +337,20 @@ void Database::loadXMLExtraElements(QXmlStreamReader &xml, const QString &name)
     xml.raiseError(tr("Unrecognized element '") + name + "'");
 }
 
-bool Database::htmlExport(const QString &path, const QList<int> &idxs) {
+bool Database::htmlExport(const QString &path, std::list<int> &idxs) {
     QLOGX("Exporting database as html to '" << path);
     QFile file(path);
-    if (!file.open(QIODevice::WriteOnly))
-    {
+    if (!file.open(QIODevice::WriteOnly)) {
         QLOG("Unable to open file for writing! (Error: " << file.error() << ")");
         return false;
     }
     
-    QList<int> dbaseIdxs;
     // there was nothing selected in the table, or just one active row, use all idxs
-    if (idxs.count() <= 1)
-    {
-        for (int i = 0; i < entries_.size(); ++i) dbaseIdxs.append(i);
+    if (idxs.count() <= 1) {
+      idxs.resize(entries_.size());
+      std::iota(idxs.begin(), idxs.end(), 0);
     }
-    else dbaseIdxs = idxs;
-    Q_ASSERT(dbaseIdxs.count() > 1);
+    Q_ASSERT(idxs.count() > 1);
     
     QTextStream stream(&file);
     stream.setCodec("UTF-8");
@@ -372,9 +369,7 @@ bool Database::htmlExport(const QString &path, const QList<int> &idxs) {
            << "\t\t\t\t<th>Created</th>\n"
            << "\t\t\t</tr>\n\t\t</thead>\n\t\t<tbody>\n";
     
-    for (int i = 0; i < dbaseIdxs.size(); ++i)
-    {
-        const int idx = dbaseIdxs.at(i);
+    for (const int idx : idxs) {
         const Entry &entry= entries_.at(idx);
         const QString date = created_.addSecs(entry.createStamp()).toString("dd.MM.yyyy.hh.mm");
         
