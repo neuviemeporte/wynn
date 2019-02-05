@@ -102,7 +102,7 @@ public slots:
   void slot_database_resetClicked();
   
   // database quiz funcionality
-  void slot_quiz_clicked();
+  void slot_database_quizClicked();
   void slot_quiz_typeChanged();
   void slot_quiz_correctClicked();
   void slot_quiz_incorrectClicked();
@@ -133,6 +133,8 @@ protected:
   void applySettings();
   
   QString dbaseSavePath(const db::Database *db) const;
+  QString dbaseName() const;
+  QModelIndexList dbaseSelection() const;
   
   void reloadExternalDbases(const QString &newdir);
   void reloadDbaseCombo(const bool restoreSelection);
@@ -145,7 +147,6 @@ protected:
   void addToDatabase(const QString &item, const QString &desc);
   
   void setQuizControlsEnabled(bool arg);
-  db::QuizDirection curQuizType() const;
   void displayQuizQuestion();
   void reveaQuizAnswer();
   void finishQuiz(const bool saveResults);

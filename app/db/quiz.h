@@ -10,17 +10,18 @@ namespace db {
 
 class DatabaseInterface;
 
+// TODO: create Q_PROPERTY bindings
 struct QuizSettings {
-    QuizDirection type;
-	bool range, level, take;
-	int rangeFrom, rangeTo, levelFrom, levelTo, takeCount;
-	QuizTakeMode takeMode;
-
-	QuizSettings() :
-        type(DIR_UNDEF),
-		range(false), level(false), take(false),
-		rangeFrom(0), rangeTo(0), levelFrom(0), levelTo(0), takeCount(0),
-		takeMode(TAKE_UNDEF) {}
+  QuizDirection type;
+  bool range, level, take;
+  int rangeFrom, rangeTo, levelFrom, levelTo, takeCount;
+  QuizTakeMode takeMode;
+  
+  QuizSettings() :
+    type(DIR_UNDEF),
+    range(false), level(false), take(false),
+    rangeFrom(0), rangeTo(0), levelFrom(0), levelTo(0), takeCount(0),
+    takeMode(TAKE_UNDEF) {}
 };
 
 struct QuizStats {

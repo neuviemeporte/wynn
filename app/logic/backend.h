@@ -35,6 +35,7 @@ private:
   Answer answer_;
   QString entryItem_, entryDesc_, response_;
   std::list<int> selection_;
+  db::QuizSettings quizSettings_;
   
 public:
   Backend();
@@ -54,6 +55,8 @@ public:
   void dbaseEntryEdit(const QModelIndexList &selection);
   void dbaseEntryFind(const QModelIndexList &selection);
   void dbaseExport(const QModelIndexList &selection, const QString &path);
+  void dbaseReset();
+  void dbaseQuiz(const QModelIndexList &selection, const db::QuizSettings &settings);
   
 signals:
   void warning(const QString &title, const QString &msg);
@@ -68,6 +71,7 @@ signals:
   void dbaseRemoved(const QString &name);
   void dbaseUpdated(const int where);
   void dbaseEntry(const QString &title, const QString &item, const QString &desc);
+  void quizQuestion(const QString &qtext, const QString &atext);
   
 protected:
   enum Operation {

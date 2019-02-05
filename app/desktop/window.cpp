@@ -162,7 +162,7 @@ MainForm::MainForm(ExtBackend *backend) : QMainWindow(nullptr),
   connect(ui_.dbaseFindButton,   SIGNAL(clicked()),                      this, SLOT(slot_database_findClicked()));
   connect(ui_.dbaseExportButton, SIGNAL(clicked()),                      this, SLOT(slot_database_exportClicked()));
   connect(ui_.dbaseResetButton,  SIGNAL(clicked()),                      this, SLOT(slot_database_resetClicked()));
-  connect(ui_.quizButton,        SIGNAL(clicked()),                      this, SLOT(slot_quiz_clicked()));
+  connect(ui_.quizButton,        SIGNAL(clicked()),                      this, SLOT(slot_database_quizClicked()));
   connect(ui_.quizShowDescRadio, SIGNAL(clicked()),                      this, SLOT(slot_quiz_typeChanged()));
   connect(ui_.quizShowItemRadio, SIGNAL(clicked()),                      this, SLOT(slot_quiz_typeChanged()));
   connect(ui_.databaseTable,     SIGNAL(activated(const QModelIndex &)), this, SLOT(slot_database_editClicked()));
@@ -514,7 +514,7 @@ void MainForm::slot_database_updated(const int where) {
 // remove button clicked in database panel
 void MainForm::slot_database_entryRemoveClicked() {
   QLOG("Database remove button clicked");
-  const auto selection = ui_.databaseTable->selectionModel()->selectedRows();
+  const auto selection = dbaseSelection();
   if (selection.empty()) {
     QLOG("Nothing selected in database table!");
     QMessageBox::information(this, tr("Nothing selected"), tr("No entries selected in database table for removal!"));
@@ -526,7 +526,7 @@ void MainForm::slot_database_entryRemoveClicked() {
 // copy button clicked in database panel
 void MainForm::slot_database_copyClicked() {
   QLOG("Database copy button clicked");
-  const auto selection = ui_.databaseTable->selectionModel()->selectedRows();
+  const auto selection = dbaseSelection();
   if (selection.empty()) {
     QLOG("Nothing selected in database table!");
     QMessageBox::information(this, tr("Nothing selected"), tr("No entries selected in database table for copying!"));
@@ -538,7 +538,7 @@ void MainForm::slot_database_copyClicked() {
 // move button clicked in database panel
 void MainForm::slot_database_moveClicked() {
   QLOG("Database move button clicked");
-  const auto selection = ui_.databaseTable->selectionModel()->selectedRows();
+  const auto selection = dbaseSelection();
   if (selection.empty()) {
     QLOG("Nothing selected in database table!");
     QMessageBox::information(this, tr("Nothing selected"), tr("No entries selected in database table for moving!"));
@@ -549,7 +549,7 @@ void MainForm::slot_database_moveClicked() {
 
 void MainForm::slot_database_editClicked() {
   QLOGX("Database edit button clicked");
-  const auto selection = ui_.databaseTable->selectionModel()->selectedRows();
+  const auto selection = dbaseSelection();
   if (selection.empty()) {
     QLOG("Nothing selected in database table!");
     QMessageBox::information(this, tr("Nothing selected"), tr("No entries selected in database table for editing!"));
@@ -560,12 +560,11 @@ void MainForm::slot_database_editClicked() {
   
 void MainForm::slot_database_findClicked() {
   QLOGX("Database find button clicked");
-  const auto selection = ui_.databaseTable->selectionModel()->selectedRows();
-  backend_->dbaseEntryFind(selection);
+  backend_->dbaseEntryFind(dbaseSelection());
 }
 
 void MainForm::slot_database_exportClicked() {
-  QLOG("Database export button clicked");
+  QLOGX("Database export button clicked");
   const QString path = QFileDialog::getSaveFileName(this, tr("Export database"), QDir::homePath(), "HTML (*.htm *.html)");
   if ( path.isEmpty() ) {
     QLOG("No file selected to save");
@@ -582,96 +581,50 @@ void MainForm::slot_database_exportClicked() {
 }
 
 void MainForm::slot_database_resetClicked() {
-  QLOG("Database reset button clicked");
-  if ( !curDbase_ ) {
-    popDbaseMissing();
-    return;
-  }
-  
+  QLOGX("Database reset button clicked");
   const auto button = QMessageBox::warning(this, 
-                                           tr("Database reset"), 
-                                           tr("All quiz points, failure counters and test dates will be reset for database '") + curDbase_->name() 
-                                           + tr("'. Are you sure?"), 
-                                           QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    tr("Database reset"), 
+    tr("All quiz points, failure counters and test dates will be reset for database '%1'. Are you sure?").arg(dbaseName()), 
+    QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
   
-  if (button == QMessageBox::No) {
+  if (button != QMessageBox::Yes) {
     QLOG("User canceled");
     return;
   }
-  else {
-    QLOG("Proceeding to erase database contents");
-    curDbase_->reset();
-  }
+  
+  backend_->dbaseReset();
 }
 
-void MainForm::slot_quiz_clicked() {
-  if ( !curDbase_ ) {
-    popDbaseMissing();
+void MainForm::slot_database_quizClicked() {
+  QLOGX("Quiz start button clicked");
+  const auto selection = dbaseSelection();
+  db::QuizSettings settings;
+  settings.type = (ui_.quizShowDescRadio->isChecked() ? DIR_SHOWDESC : DIR_SHOWITEM);
+  // TODO: remove UI controls in database panel, pop special dialog for quiz settings before starting
+  // - will also make unnecessary updating of the quiz spinboxes every time there is a database update,
+  // and remove ambiguity between row selection and quiz criteria - we won't show the criteria options
+  // in the settings dialog if rows were selected.
+  settings.range     = ui_.quizRangeCheck->isChecked();
+  settings.rangeFrom = ui_.quizRangeFromSpin->value();
+  settings.rangeTo   = ui_.quizRangeToSpin->value();
+  // range inside database index is taken care of automatically, can't select higher index in spinbox
+  if ( settings.range && settings.rangeFrom >= settings.rangeTo ) {
+    QMessageBox::information(this, tr("Bad range"), tr("\"From\" value for index must be less than \"To\" value."));
     return;
   }
-  
-  if ( quiz_ ) {
-    QLOGX("Previous quiz instance not cleaned up before trying to start new one!");
+  settings.level     = ui_.quizPointsCheck->isChecked();
+  settings.levelFrom = ui_.quizPointsFromSpin->value();
+  settings.levelTo   = ui_.quizPointsToSpin->value();
+  if ( settings.level && settings.levelFrom >= settings.levelTo ) {
+    QMessageBox::information(this, tr("Bad range"), tr("\"From\" value for level must be less than \"To\" value."));
     return;
   }
-  
-  if ( curDbase_->locked() ) {
-    popDbaseLocked(); 
-    return; 
-  }
-  
-  const auto quizType = curQuizType();
-  // retrieve selected indices from database table
-  QList<int> idxs = getSelectedDbaseTableIdxs();
-  if (idxs.count() > 1) {
-    QLOG("Adding quiz questions based on selection inside database table");
-    quiz_ = new Quiz(curDbase_, quizType, idxs);
-  }
-  else {
-    QLOG("Adding quiz questions based on selected criteria");
-    QuizSettings settings;
-    settings.type = quizType;
-    QLOG("Database quiz button clicked, type = " << settings.type);
-    
-    settings.range     = ui_.quizRangeCheck->isChecked();
-    settings.rangeFrom = ui_.quizRangeFromSpin->value();
-    settings.rangeTo   = ui_.quizRangeToSpin->value();
-    // range inside database index is taken care of automatically, can't select higher index in spinbox
-    if ( settings.range && settings.rangeFrom >= settings.rangeTo ) {
-      QMessageBox::information(this, tr("Bad range"), tr("\"From\" value for index must be less than \"To\" value."));
-      return;
-    }
-    
-    settings.level     = ui_.quizPointsCheck->isChecked();
-    settings.levelFrom = ui_.quizPointsFromSpin->value();
-    settings.levelTo   = ui_.quizPointsToSpin->value();
-    if ( settings.level && settings.levelFrom >= settings.levelTo ) {
-      QMessageBox::information(this, tr("Bad range"), tr("\"From\" value for level must be less than \"To\" value."));
-      return;
-    }
-    
-    settings.take      = ui_.quizTakeCheck->isChecked();
-    settings.takeCount = ui_.quizTakeSpin->value();
-    if      ( ui_.quizTakeFailRadio->isChecked()   ) settings.takeMode = TAKE_FAILS;
-    else if ( ui_.quizTakeOldieRadio->isChecked()  ) settings.takeMode = TAKE_OLDIES;
-    else if ( ui_.quizTakeRandomRadio->isChecked() ) settings.takeMode = TAKE_RANDOM;
-    quiz_ = new Quiz(curDbase_, settings);
-  }
-  
-  if ( quiz_->empty() ) {
-    QMessageBox::information(this, tr("No questions"), 
-                             tr("The current combination of quiz settings yielded no questions to be asked. "
-                                "Change the settings or select some entries from the table by hand and try again."));
-    return;
-  }
-  
-  setQuizControlsEnabled( false );
-  quizDialog_->setWindowTitle(tr("Quiz") + " (" + curDbase_->name() + ")");
-  // quiz dialog is not modal, lets user use dictionary while quiz in progress,
-  // but database modifications are locked out
-  curDbase_->setLocked( true );
-  displayQuizQuestion();
-  quizDialog_->show();
+  settings.take      = ui_.quizTakeCheck->isChecked();
+  settings.takeCount = ui_.quizTakeSpin->value();
+  if      ( ui_.quizTakeFailRadio->isChecked()   ) settings.takeMode = TAKE_FAILS;
+  else if ( ui_.quizTakeOldieRadio->isChecked()  ) settings.takeMode = TAKE_OLDIES;
+  else if ( ui_.quizTakeRandomRadio->isChecked() ) settings.takeMode = TAKE_RANDOM;
+  backend_->dbaseQuiz(selection, settings);
 }
 
 void MainForm::slot_quiz_typeChanged()
@@ -1136,6 +1089,14 @@ void MainForm::applySettings()
   QLOGDEC;
 }
 
+QString MainForm::dbaseName() const {
+  return ui_.databaseCombo->currentText();
+}
+
+QModelIndexList MainForm::dbaseSelection() const {
+  return ui_.databaseTable->selectionModel()->selectedRows();
+}
+
 void MainForm::slot_statusMessage(const QString &text) {
   ui_.statusBar->showMessage(text, MSG_TIMEOUT);
 }
@@ -1386,11 +1347,6 @@ void MainForm::setQuizControlsEnabled(bool arg)
   ui_.quizDirectionGroupBox->setEnabled(arg);
   ui_.quizCriteriaGroupBox->setEnabled(arg);
   ui_.quizButton->setEnabled(arg);
-}
-
-QuizDirection MainForm::curQuizType() const
-{
-  return (ui_.quizShowDescRadio->isChecked() ? DIR_SHOWDESC : DIR_SHOWITEM);
 }
 
 void MainForm::displayQuizQuestion() {

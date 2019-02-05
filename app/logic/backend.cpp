@@ -227,6 +227,7 @@ void Backend::dbaseEntryEdit(const QModelIndexList &selection) {
   selection_ = mapToDatabase(selection, false);
   Q_ASSERT(!selection_.empty());
   Q_ASSERT(curDbase_);
+  // TODO: continueOperation()?
   const auto &entry = curDbase_->entry(selection_.front());
   emit dbaseEntry(TITLE_EDIT, entry.item(), entry.description());
 }
@@ -251,6 +252,46 @@ void Backend::dbaseExport(const QModelIndexList &selection, const QString &path)
    QLOG("Export successful");
    emit status(MSG_EXPORT_SUCCESS.arg(path));
  }
+}
+
+void Backend::dbaseReset() {
+  if (!checkCurrentDatabase()) return;
+  Q_ASSERT(curDbase_);
+  const auto error = curDbase_->reset();
+  if (error != db::Error::OK) 
+    QLOG("Error reseting database: " << error);
+}
+
+void Backend::dbaseQuiz(const QModelIndexList &selection, const QuizSettings &settings) {
+  if (!checkCurrentDatabase()) return;
+  
+  if (selection.size() > 1) {
+    QLOG("Creating quiz from selection");
+    quiz_ = new Quiz(curDbase_, settings.type, mapToDatabase(selection, false));
+  }
+  else {
+    QLOG("Creating quiz from criteria");
+    quiz_ = new Quiz(curDbase_, settings);
+  }
+  
+  if (quiz_->empty()) {
+    emit warning(tr("No questions"), 
+                 tr("The current combination of quiz settings yielded no questions to be asked. "
+                    "Change the settings or select some entries from the table by hand and try again."));
+    delete quiz_;
+    return;
+  }
+  curOp_ = OP_QUIZ;
+  curDbase_->setLocked(true);
+  emit quizQuestion(quiz_->questionText(), quiz_->answerText());
+  
+  //  setQuizControlsEnabled( false );
+  //  quizDialog_->setWindowTitle(tr("Quiz") + " (" + curDbase_->name() + ")");
+  //  // quiz dialog is not modal, lets user use dictionary while quiz in progress,
+  //  // but database modifications are locked out
+  //  curDbase_->setLocked( true );
+  //  displayQuizQuestion();
+  //  quizDialog_->show();  
 }
 
 // TODO: execute actual work on separate thread
