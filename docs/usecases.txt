@@ -74,7 +74,11 @@ WYNN_1.12: database quiz
 3. application enters quiz mode, quiz panel/dialog shown, 
 4. question shown, answer blanked
 5. user clicks the button to reveal the answer, buttons for evaluating the answer become active
-6. user clicks the appropriate answer button (correct/incorrect/unsure), result is stored in the quiz object
+6. user clicks the appropriate answer button (correct/incorrect/unsure), answer is stored by the quiz
 7. repeat with [4] until questions exhausted or user cancels quiz
-8a. ran out of questions, show summary and save results to database
-8b. user canceled quiz - ask whether to save partial results
+8a. ran out of questions, show summary and save results to database, done
+8b. user canceled quiz 
+9a. no answers given, done
+9b. answer present, ask whether to save partial results
+10a. user answered no, done
+10b. show summary and save results to database, done

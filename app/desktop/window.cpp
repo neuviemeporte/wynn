@@ -113,10 +113,10 @@ MainForm::MainForm(ExtBackend *backend) : QMainWindow(nullptr),
   quizDialog_ = new QDialog(this);
   quizDialogUI_.setupUi(quizDialog_);
   quizDialog_->installEventFilter(new QuizDialogEventFilter(quizDialog_, &quizDialogUI_));
+  connect(quizDialogUI_.revealButton,    SIGNAL(clicked()), this, SLOT(slot_quiz_revealClicked()));
   connect(quizDialogUI_.correctButton,   SIGNAL(clicked()), this, SLOT(slot_quiz_correctClicked()));
   connect(quizDialogUI_.incorrectButton, SIGNAL(clicked()), this, SLOT(slot_quiz_incorrectClicked()));
   connect(quizDialogUI_.unsureButton,    SIGNAL(clicked()), this, SLOT(slot_quiz_unsureClicked()));
-  connect(quizDialogUI_.revealButton,    SIGNAL(clicked()), this, SLOT(slot_quiz_revealClicked()));
   connect(quizDialogUI_.closeButton,     SIGNAL(clicked()), this, SLOT(slot_quiz_closeClicked()));
   
   QLOG("Connecting signals");
@@ -132,6 +132,8 @@ MainForm::MainForm(ExtBackend *backend) : QMainWindow(nullptr),
   connect(backend_, SIGNAL(dbaseRemoved(const QString&)), this, SLOT(slot_database_removed(const QString&)));
   connect(backend_, SIGNAL(dbaseUpdated(const int)), this, SLOT(slot_database_updated(const int)));
   connect(backend_, SIGNAL(dbaseEntry(QString, QString, QString)), this, SLOT(slot_backend_dbaseEntry(QString, QString, QString)));
+  connect(backend_, SIGNAL(quizQuestion(QString,QString,QString)), this, SLOT(slot_backend_quizQuestion(QString,QString)));
+  connect(backend_, SIGNAL(quizFinished(QString,QString), this, SLOT(slot_backend_quizFinished(QString,QString)));
   connect(backend_, SIGNAL(dictResults()), this, SLOT(slot_dict_results()));
   
   // Main stack widget page changing buttons
@@ -284,77 +286,88 @@ void MainForm::slot_backend_dbaseEntry(const QString &title, const QString &item
   dbaseDialog_->open();
 }
 
+void MainForm::slot_backend_quizQuestion(const QString &qtext, const QString &atext, const QString &status) {
+  QLOGX("New quiz question: " << qtext << "/" << atext << "/" << status);
+  quizDialogUI_.questionLabel->setText(qtext);
+  quizDialogUI_.answerLabel->setVisible(false);
+  quizDialogUI_.answerLabel->setText(atext);
+  quizDialogUI_.correctButton->setEnabled(false);
+  quizDialogUI_.incorrectButton->setEnabled(false);
+  quizDialogUI_.unsureButton->setEnabled(false);
+  quizDialogUI_.revealButton->setEnabled(true);
+  quizDialogUI_.progressLabel->setText(status);
+  // quiz dialog is not visible yet, means we are just starting the quiz
+  if (!quizDialog_->isVisible()) {
+    QLOG("Initializing UI for quiz");
+    setQuizControlsEnabled(false);
+    quizDialog_->setWindowTitle(tr("Quiz (%1)").arg(dbaseName()));
+    quizDialog_->show();
+  }
+}
+
+void MainForm::slot_backend_quizFinished(const QString &title, const QString &stats) {
+  QLOGX("Quiz finished");
+  QMessageBox::information(this, title, stats);
+  quizDialog_->hide();
+  setQuizControlsEnabled(true);
+}
+
 // ==============================================================================================
 // ============================== Dictionary slots
 // ==============================================================================================
 
-void MainForm::slot_dict_switchPlugin(int plugIdx)
-{
+void MainForm::slot_dict_switchPlugin(int plugIdx) {
   QLOGX("Dictionary language changed to: " << plugIdx);
-  
   // block the dictColumnResized signal from the main widget that is emitted after the model is changed,
   // don't want to overwrite the correct column widths in the plugin with a stupid value
   QHeaderView *header = ui_.dictionaryTable->horizontalHeader();
   header->blockSignals(true);
   backend_->pluginChanged(plugIdx);
-  
   QStackedWidget *stack = ui_.dictPanelStack;
   // set the size policy of the page being hidden to ignored so it doesn't influence the size
   // of the stacked widget anymore
   QWidget *curWidget = stack->currentWidget();
   if (curWidget)
-  {
     curWidget->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
-  }
-  
   stack->setCurrentIndex(plugIdx);
-  
   // set the size policy of the page that just became visible to make the widget adjust its size to it
   curWidget = stack->currentWidget();
   Q_ASSERT(curWidget);
   curWidget->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
   stack->adjustSize();
-  
   header->blockSignals(false);
 }
 
-void MainForm::slot_dict_langAboutClicked()
-{
+void MainForm::slot_dict_langAboutClicked() {
   backend_->pluginAbout();
 }
 
-void MainForm::slot_dict_detailsClicked()
-{
+void MainForm::slot_dict_detailsClicked() {
   backend_->dictDetails();
 }
 
-void MainForm::slot_dict_toDbaseClicked()
-{
+void MainForm::slot_dict_toDbaseClicked() {
   backend_->dictStore();
 }
 
-void MainForm::slot_dict_results()
-{
+void MainForm::slot_dict_results() {
   // when results present, shift keyboard focus to results table
   ui_.dictionaryTable->selectRow(0);
   ui_.dictionaryTable->setFocus(Qt::OtherFocusReason);
 }
 
-void MainForm::slot_dict_tableItemActivated(const QModelIndex &index)
-{
+void MainForm::slot_dict_tableItemActivated(const QModelIndex &index) {
   QLOGX("Table item activated, row: " << index.row());
   backend_->dictDetails();
 }
 
-void MainForm::slot_dict_columnResized(int index, int oldSize, int newSize)
-{
+void MainForm::slot_dict_columnResized(int index, int oldSize, int newSize) {
   QLOGX("Column " << index << " was resized from " << oldSize << " to " << newSize);
   // TODO: cleanup processing for this in plugins, come up with something better on UI side
 }
 
 // TODO: remove if not necessary anymore
-void MainForm::slot_dict_resizeColumns(const QList<int> &widths)
-{
+void MainForm::slot_dict_resizeColumns(const QList<int> &widths) {
   QLOGX("Requested column resize on " << widths.size() << " columns");
   QHeaderView *header = ui_.dictionaryTable->horizontalHeader();
   // prevent header from sending notifications about these resizes
@@ -362,24 +375,18 @@ void MainForm::slot_dict_resizeColumns(const QList<int> &widths)
   
   // check if all widths are larger than zero
   bool ok = true;
-  for (int i = 0; i < widths.size(); ++i)
-  {
+  for (int i = 0; i < widths.size(); ++i) {
     const int width = widths.at(i);
     if (width <= 0) { ok = false; break; }
   }
   
   QLOG("Widths ok: " << ok);
-  
   // if so, proceed with resize
   if (ok) for (int i = 0; i < widths.size(); ++i)
-  {
     header->resizeSection(i, widths.at(i));
-  }
   // otherwise try an automatic resize
   else
-  {
     ui_.dictionaryTable->horizontalHeader()->resizeSections(QHeaderView::ResizeToContents);
-  }
   
   header->blockSignals(false);
 }
@@ -393,11 +400,9 @@ void MainForm::slot_database_changeCurrent(const QString& text) {
   QLOGX("Current database changed to: '" << text << "'");
   // enable or disable ui elements depending on whether the dbase combo box is empty or not
   const bool haveItem = !text.isEmpty();
-  for ( auto widget : std::vector<QWidget*>{ 
-        ui_.databaseCombo, ui_.saveButton, ui_.deleteButton, ui_.dbaseAddButton, ui_.dbaseRemoveButton, ui_.dbaseCopyButton, 
-        ui_.dbaseMoveButton, ui_.dbaseEditButton, ui_.dbaseFindButton, ui_.dbaseExportButton, ui_.dbaseResetButton, ui_.quizButton }) {
-    widget->setEnabled( haveItem );
-  }
+  for (QWidget *widget : { ui_.databaseCombo, ui_.saveButton, ui_.deleteButton, ui_.dbaseAddButton, ui_.dbaseRemoveButton, 
+        ui_.dbaseCopyButton, ui_.dbaseMoveButton, ui_.dbaseEditButton, ui_.dbaseFindButton, ui_.dbaseExportButton, ui_.dbaseResetButton, 
+        ui_.quizButton }) widget->setEnabled( haveItem );
   backend_->dbaseSwitch(text);
 }
 
@@ -423,7 +428,6 @@ void MainForm::slot_database_createClicked() {
                                              QLineEdit::Normal, "", &accepted);
   
   if (!accepted || name.isEmpty()) return;
-  
   // discriminate against ill-formed database names
   if (!nameRegex.exactMatch(name)) {
     QMessageBox::warning(this, tr("Invalid name"), 
@@ -431,7 +435,6 @@ void MainForm::slot_database_createClicked() {
                          QMessageBox::Ok, QMessageBox::Ok);
     return;
   }
-  
   QLOG("Creating database, name: '" << name << "'" );
   backend_->dbaseCreate(name);
 }
@@ -598,6 +601,7 @@ void MainForm::slot_database_resetClicked() {
 void MainForm::slot_database_quizClicked() {
   QLOGX("Quiz start button clicked");
   const auto selection = dbaseSelection();
+  // TODO: figure out better way to pass quiz settings than to expose DB internals to UI
   db::QuizSettings settings;
   settings.type = (ui_.quizShowDescRadio->isChecked() ? DIR_SHOWDESC : DIR_SHOWITEM);
   // TODO: remove UI controls in database panel, pop special dialog for quiz settings before starting
@@ -624,47 +628,43 @@ void MainForm::slot_database_quizClicked() {
   if      ( ui_.quizTakeFailRadio->isChecked()   ) settings.takeMode = TAKE_FAILS;
   else if ( ui_.quizTakeOldieRadio->isChecked()  ) settings.takeMode = TAKE_OLDIES;
   else if ( ui_.quizTakeRandomRadio->isChecked() ) settings.takeMode = TAKE_RANDOM;
-  backend_->dbaseQuiz(selection, settings);
+  backend_->quizStart(selection, settings);
 }
 
-void MainForm::slot_quiz_typeChanged()
-{
+// TODO: remove after moving quiz controls to separate dialog, display both directions' points in table view
+void MainForm::slot_quiz_typeChanged() {
   QLOGX("Radio button selection changed in quiz type button group");
-  QLOGINC;
   QuizDirection type = curQuizType();
   Q_ASSERT(dbaseModel_ != nullptr);
   dbaseModel_->setQuizType(type);
-  QLOGDEC;
-}
-
-void MainForm::slot_quiz_correctClicked() {
-  QLOGX("CORRECT answer in quiz");
-  Q_ASSERT(quiz_);
-  quiz_->answerCorrect();
-  displayQuizQuestion();
-}
-
-void MainForm::slot_quiz_incorrectClicked() {
-  QLOGX("INCORRECT answer in quiz");
-  Q_ASSERT(quiz_);
-  quiz_->answerIncorrect();
-  displayQuizQuestion();
-}
-
-void MainForm::slot_quiz_unsureClicked() {
-  QLOGX("UNSURE answer in quiz");
-  Q_ASSERT(quiz_);
-  quiz_->answerUnsure();
-  displayQuizQuestion();
 }
 
 void MainForm::slot_quiz_revealClicked() {
   QLOGX("Reveal button clicked");
-  reveaQuizAnswer();
+  quizDialogUI_.answerLabel->setVisible(true);
+  quizDialogUI_.correctButton->setEnabled(true);
+  quizDialogUI_.incorrectButton->setEnabled(true);
+  quizDialogUI_.unsureButton->setEnabled(true);
+  quizDialogUI_.revealButton->setEnabled(false);
+}
+
+void MainForm::slot_quiz_correctClicked() {
+  QLOGX("Correct answer in quiz");
+  backend_->quizAnswer(Backend::CORRECT);
+}
+
+void MainForm::slot_quiz_incorrectClicked() {
+  QLOGX("Incorrect answer in quiz");
+  backend_->quizAnswer(Backend::INCORRECT);
+}
+
+void MainForm::slot_quiz_unsureClicked() {
+  QLOGX("Unsure answer in quiz");
+  backend_->quizAnswer(Backend::UNSURE);
 }
 
 void MainForm::slot_quiz_closeClicked() {
-  QLOGX("Close button clicked");
+  QLOGX("Close button clicked on quiz dialog");
   
   const int qIdx = quiz_->questionIndex();
   // nothing answered yet, no results so close without further questions
@@ -698,34 +698,6 @@ void MainForm::slot_quiz_closeClicked() {
   default: break;
   }
 }
-
-void MainForm::finishQuiz(const bool saveResults) {
-  Q_ASSERT(curDbase_ && quiz_);
-  if ( saveResults ) {
-    const int count = quiz_->questionCount();
-    auto stats = quiz_->stats();
-    
-    QMessageBox::information(GUI, tr("Done"), tr("Quiz completed.\n\nQuestions answered: ")
-                             + QString::number( stats.curQuestion ) + " of " + QString::number( count )
-                             + " (" + QString::number( stats.complete( count ),'f',2) + "%)\n"
-                             + tr("Correct answers: ")   + QString::number(stats.count(SUCCESS))
-                             + " ("+ QString::number(stats.percent(SUCCESS),'f',2) + "%)\n"
-                             + tr("Incorrect answers: ") + QString::number(stats.count(FAIL))
-                             + " (" + QString::number(stats.percent(FAIL),'f',2) + "%)\n"
-                             + tr("Unsure answers: ")    + QString::number(stats.count(NOCHANGE))
-                             + " (" + QString::number(stats.percent(NOCHANGE),'f',2) + "%)\n");
-    
-    quiz_->saveResults();
-  }
-  
-  QLOGX("Quiz done");
-  curDbase_->setLocked(false);
-  quizDialog_->hide();
-  delete quiz_;
-  quiz_ = nullptr;
-  setQuizControlsEnabled(true);
-}
-
 
 // ==============================================================================================
 // ============================== MainForm: public slots - settings
@@ -1218,132 +1190,11 @@ int MainForm::findComboIndex(const QComboBox *combo, const QString &text)
   return ret;
 }
 
-void MainForm:: copyToAnotherDatabase(const bool move)
-{
-  // setup database entry dialog: disable item/desc editing, enable database selection combobox
-  setupDbaseDialogCombo(false, false);
-  if (dbaseDialogUI_.dbaseCombo->count() == 0) {
-    QLOG("Target database selection combo is empty after setup, unable to proceed");
-    QMessageBox::information(this, tr("Information"), tr("Unable to perform operation. There are no databases to copy/move to."));
-    return;
-  }
-  
-  dbaseDialogUI_.dbaseCombo->setEnabled(true);
-  dbaseDialogUI_.entryEdit->setEnabled(false);
-  dbaseDialogUI_.descEdit->setEnabled(false);
-  
-  const QString dialogTitle = (move ? tr("Move item(s) to another database") : 
-                                      tr("Copy item(s) to another database"));
-  dbaseDialog_->setWindowTitle( dialogTitle );
-  
-  // retrieve indexes of selected database items (may copy in bulk)
-  QList<int> dbIdxs = getSelectedDbaseTableIdxs();
-  // return if no selection
-  if (dbIdxs.isEmpty()) {
-    QLOG("Nothing selected, done");
-    return;
-  }
-  
-  QLOG("Selected rows (" << dbIdxs.size() << "): " << dbIdxs);
-  
-  if (curDbase_ == nullptr) {
-    QLOG("Current database handle is nullptr!");
-    return;
-  }
-  
-  // if only one item selected, fill dialog with its data
-  if (dbIdxs.size() == 1) {
-    QLOG("Single item mode");
-    const Entry &entry = curDbase_->entry(dbIdxs.at(0));
-    dbaseDialogUI_.entryEdit->setText(entry.item());
-    dbaseDialogUI_.descEdit->setText(entry.description());
-  }
-  // otherwise indicate multiple selections
-  else {
-    QLOG("Multiple items mode");
-    dbaseDialogUI_.entryEdit->setText(tr(" -- multiple -- "));
-    dbaseDialogUI_.descEdit->setText(tr(" -- multiple -- "));
-  }
-  
-  // pop dialog and continue if ok clicked
-  if (dbaseDialog_->exec() != QDialog::Accepted) {
-    QLOG("User cancelled operation");
-    return;
-  }
-  
-  // find target database
-  Database *target = database(dbaseDialogUI_.dbaseCombo->currentText());
-  if (target == nullptr) {
-    QLOG("Target database handle is nullptr!");
-    return;
-  }
-  
-  QLOG("Copying " << dbIdxs.size() <<  " item(s) to database '" << target->name() << "'" );
-  
-  // bulk copy items to target database from current database
-  // TODO: does it even make sense to have this function? perhaps, if DbError
-  // held all the error indices, it would be possible to add in bulk and
-  // then process the remainder as per user answer(s)
-  int answer = QMessageBox::NoButton;
-  QList<int> moveIdxs;
-  for (int curIdx : dbIdxs) {
-    const Entry &entry = curDbase_->entry( curIdx );
-    auto itemText = entry.item();
-    auto descText = entry.description();
-    
-    // if go-ahead given, ignore duplicates
-    if ( answer == QMessageBox::YesToAll ) {
-      Error error = target->add(itemText, descText, {}, true);
-      Q_ASSERT(error == Error::OK);
-      if ( move ) moveIdxs.append( curIdx );
-    }
-    else {
-      // don't ignore duplicates (yet)
-      Error error = target->add(itemText, descText, {}, false);
-      // check error type,
-      if (error == Error::OK) {
-        // in move mode, add index to successfully copied list for later removal from source
-        if ( move ) moveIdxs.append( curIdx );
-        continue;
-      }
-      // if duplicate detected, warn
-      else if ( error == Error::DUPLI && answer != QMessageBox::NoToAll ) {
-        const Entry &dupEntry = target->entry(error.index());
-        answer = QMessageBox::information(this, tr("Duplicate entry"),
-                                          tr("Possible duplicate found for '") + entry.item() + "' (" + entry.description() +
-                                          tr(") in target database: '") + dupEntry.item() + "' (" + dupEntry.description() +
-                                          tr("). Continue?"),
-                                          QMessageBox::Yes | QMessageBox::No | QMessageBox::YesToAll | QMessageBox::NoToAll);
-      }
-      
-      // retry item add with duplicates ignored on "yes" or "yes to all"
-      if ( answer == QMessageBox::Yes || answer == QMessageBox::YesToAll ) {
-        error = target->add(itemText, descText, {}, true);
-        if (error != Error::OK) {
-          QLOG("Unable to add to database despite ignoring duplicates?! (" << error.msg() << ")");
-          return;
-        }
-        if ( move ) moveIdxs.append( curIdx );
-      }
-    } // not YesToAll
-  } // iterate over input indexes
-  
-  
-  if ( move && !moveIdxs.isEmpty() ) {
-    QLOG("Removing item(s) from source database");
-    curDbase_->remove(moveIdxs);
-    slot_database_countUpdate();
-  }
-}
-
-void MainForm::setQuizControlsEnabled(bool arg)
-{
+void MainForm::setQuizControlsEnabled(bool arg) {
   QLOGX("Setting enabled state of quiz controls to: " << arg);
-  
   ui_.databaseCombo->setEnabled(arg);
   ui_.createButton->setEnabled(arg);
   ui_.deleteButton->setEnabled(arg);
-  
   ui_.quizDirectionGroupBox->setEnabled(arg);
   ui_.quizCriteriaGroupBox->setEnabled(arg);
   ui_.quizButton->setEnabled(arg);
@@ -1368,31 +1219,6 @@ void MainForm::displayQuizQuestion() {
   quizDialogUI_.revealButton->setEnabled(true);
   quizDialogUI_.questionLabel->setText(qTxt);
   quizDialogUI_.answerLabel->clear();
-}
-
-void MainForm::reveaQuizAnswer() {
-  Q_ASSERT(quiz_);
-  const int qIdx = quiz_->questionIndex(), qCnt = quiz_->questionCount(), qLvl = quiz_->questionLevel(), qFail = quiz_->questionFails();
-  auto qAns = quiz_->answerText();
-  QLOGX("Revealing answer, question number: " << qIdx << " of " << qCnt << ": " << qAns);
-  
-  if ( qIdx >= qCnt ) {
-    QLOGX("Question index out of range!");
-    finishQuiz(true);
-    return;
-  }
-  
-  quizDialogUI_.correctButton->setEnabled(true);
-  quizDialogUI_.incorrectButton->setEnabled(true);
-  quizDialogUI_.unsureButton->setEnabled(true);
-  quizDialogUI_.revealButton->setEnabled(false);
-  quizDialogUI_.answerLabel->setText(qAns);
-  quizDialogUI_.progressLabel->setText(
-        quizDialogUI_.progressLabel->text() +
-        tr(" (Index: ") + QString::number(qIdx + 1) +
-        tr(", Level: ") + QString::number(qLvl) +
-        tr(", Failures: ") + QString::number(qFail) + ")"
-        );
 }
 
 void MainForm::closeEvent(QCloseEvent *event)

@@ -5,8 +5,6 @@
 #include <QDir>
 #include <map>
 
-using namespace wynn::db;
-
 namespace wynn {
 namespace app {
 
@@ -45,7 +43,8 @@ static const QString
   TITLE_EDIT = tr("Edit item"),
   TITLE_FIND = tr("Find item in database"),
   TITLE_FIND_FAIL = tr("No results"), 
-  TITLE_EXPORT_FAIL = tr("Unable to export"), 
+  TITLE_EXPORT_FAIL = tr("Unable to export"),
+  TITLE_QUIZ_DONE = tr("Done"),
   MSG_DUPLICATE = tr(
       "A similar entry was found to already exist in the database:\n"
       "'%1' / '%2' (%3).\n"
@@ -59,7 +58,13 @@ static const QString
   MSG_FIND = tr("Please enter an expression to search for:"),
   MSG_FIND_FAIL = tr("Sorry, no results were found for '%1'."),
   MSG_EXPORT_SUCCESS = tr("Exported database to '%1'"),
-  MSG_EXPORT_FAIL = tr("Couldn't open file for writing: '%1'.");
+  MSG_EXPORT_FAIL = tr("Couldn't open file for writing: '%1'."),
+  STATUS_QUIZ = tr("Question %1 of %2 (level: %3, failures: %4"),
+  MSG_QUIZ_DONE = tr("Quiz completed.\n\n"
+                     "Questions answered: %1 of %2 (%3%%)\n"
+                     "Correct answers: %4 (%5%%)\n"
+                     "Incorrect answers: %6 (%7%%)\n"
+                     "Unsure answers: %8 (%9%%)\n");
 
 Backend::Backend() : QObject(),
   curDbase_(nullptr), 
@@ -262,7 +267,7 @@ void Backend::dbaseReset() {
     QLOG("Error reseting database: " << error);
 }
 
-void Backend::dbaseQuiz(const QModelIndexList &selection, const QuizSettings &settings) {
+void Backend::quizStart(const QModelIndexList &selection, const QuizSettings &settings) {
   if (!checkCurrentDatabase()) return;
   
   if (selection.size() > 1) {
@@ -279,24 +284,35 @@ void Backend::dbaseQuiz(const QModelIndexList &selection, const QuizSettings &se
                  tr("The current combination of quiz settings yielded no questions to be asked. "
                     "Change the settings or select some entries from the table by hand and try again."));
     delete quiz_;
+    quiz_ = nullptr;
     return;
   }
   curOp_ = OP_QUIZ;
+  // quiz dialog is not modal, lets user use dictionary while quiz in progress,
+  // but database modifications are locked out
   curDbase_->setLocked(true);
-  emit quizQuestion(quiz_->questionText(), quiz_->answerText());
-  
-  //  setQuizControlsEnabled( false );
-  //  quizDialog_->setWindowTitle(tr("Quiz") + " (" + curDbase_->name() + ")");
-  //  // quiz dialog is not modal, lets user use dictionary while quiz in progress,
-  //  // but database modifications are locked out
-  //  curDbase_->setLocked( true );
-  //  displayQuizQuestion();
-  //  quizDialog_->show();  
+  continueQuiz();
+}
+
+void Backend::quizAnswer(const Backend::Result res) {
+  db::QuizAnswer ans = db::ANS_UNSURE;
+  switch (res) {
+  case CORRECT:   ans = db::ANS_CORRECT; break;
+  case INCORRECT: ans = db::ANS_INCORRECT; break;
+  case UNSURE:    ans = db::ANS_UNSURE; break;
+  }
+  Q_ASSERT(curOp_ == OP_QUIZ);
+  Q_ASSERT(quiz_);
+  Q_ASSERT(!quiz_->finished());
+  quiz_->answer(ans);
+  if (quiz_->finished()) finishQuiz(true);
+  else continueQuiz();
 }
 
 // TODO: execute actual work on separate thread
 void Backend::continueOperation() {
   QLOGX("Continuing operation: " << OP_STR[curOp_]);
+  // TODO: split into smaller functions
   if (curOp_ == OP_ENTRY_ADD) {
     if (answer_ == ANS_NO) {
       QLOG("Operation was canceled");
@@ -307,7 +323,7 @@ void Backend::continueOperation() {
     Q_ASSERT(curDbase_);
     Q_ASSERT(!entryItem_.isEmpty() && !entryDesc_.isEmpty());
     const auto error = curDbase_->add(entryItem_, entryDesc_, {}, dupIgnore);
-    if (handleDuplicate(curDbase_, error, entryItem_, entryDesc_)) 
+    if (handleDuplicate(error, curDbase_, entryItem_, entryDesc_)) 
       return;
     
     if (error == Error::OK) {
@@ -348,7 +364,7 @@ void Backend::continueOperation() {
         // try to add entry to target database
         const auto addError = target->add(entry.item(), entry.description(), {}, dupIgnore);
         // ask user about handling of duplicate unless they already answered "no to all"
-        if (handleDuplicate(target, error, entry.item(), entry.description())) 
+        if (handleDuplicate(error, target, entry.item(), entry.description())) 
           return;
         // remove entry from source database when add to target successful and we are in move mode
         // TODO: implement move operation as atomic on database level
@@ -375,7 +391,7 @@ void Backend::continueOperation() {
     const int alterIdx = selection_.front();
     const bool dupIgnore = (answer_ == ANS_YES);
     const auto error = curDbase_->alter(alterIdx, entryItem_, entryDesc_, dupIgnore);
-    if (handleDuplicate(curDbase_, error, entryItem_, entryDesc_)) {
+    if (handleDuplicate(error, curDbase_, entryItem_, entryDesc_)) {
       QLOG("Asked user about duplicate, might retry later");
       return;
     }
@@ -421,8 +437,7 @@ void Backend::continueOperation() {
   }
 }
 
-bool Backend::handleDuplicate(const Database *dbase, const db::Error &error, const QString &item, const QString &desc)
-{
+bool Backend::handleDuplicate(const db::Error &error, const db::Database *dbase, const QString &item, const QString &desc) {
   if (error != db::Error::DUPLI || answer_ == ANS_NOALL)
     return false;
   
@@ -435,93 +450,30 @@ bool Backend::handleDuplicate(const Database *dbase, const db::Error &error, con
                 { ANS_YES, ANS_NO });
   return true;
 }
+
+void Backend::finishQuiz(const bool saveResults) {
+  QLOGX("Quiz done");
+  Q_ASSERT(quiz_);
+  if (saveResults) quiz_->saveResults();
+  curDbase_->setLocked(false);
+  delete quiz_;
+  quiz_ = nullptr;
   
-//void Backend::copyFromDatabase(const Backend::Operation op, bool move)
-//{
-//  if (!checkCurrentDatabase()) 
-//  {
-//    QLOGX("Current database unavailable!");
-//    return;        
-//  }
-//  // return if no selection
-//  else if ( dbaseSelection_.isEmpty() )
-//  {
-//    QLOG("Nothing selected, done");
-//    return;
-//  }
-  
-//  if (op == OP_INIT) 
-//  {
-//    QString title, item, desc;
-//    if (move) 
-//      title = tr("Move item(s) to another database");
-//    else 
-//      title = tr("Copy item(s) to another database");
-    
-//    if (dbaseSelection_.count() == 1) 
-//    {
-//      const auto idxs = selectedDbaseIndexes();
-//      Q_ASSERT(idxs.count() == 1);
-//      const int idx = idxs.front();
-//      const Entry& entry = curDbase_->entry(idx);
-//      item = entry.item();
-//      desc = entry.description();
-//    }
-//    else 
-//    {
-//      item = desc = tr("-- multiple --");
-//    }
-    
-//    emit dbaseCopyMoveConfirm(title, item, desc, move);
-//  }
-//  else if ( op == OP_PROCESS ) 
-//  {
-//    QList<int> moveIdxs;
-//    for (int curIdx : dbIdxs) {
-//      const Entry &entry = curDbase_->entry( curIdx );
-//      auto itemText = entry.item();
-//      auto descText = entry.description();
-      
-//      // if go-ahead given, ignore duplicates
-//      if ( answer == QMessageBox::YesToAll ) {
-//        Error error = target->add(itemText, descText, {}, true);
-//        Q_ASSERT(error == Error::OK);
-//        if ( move ) moveIdxs.append( curIdx );
-//      }
-//      else {
-//        // don't ignore duplicates (yet)
-//        Error error = target->add(itemText, descText, {}, false);
-//        // check error type,
-//        if (error == Error::OK) {
-//          // in move mode, add index to successfully copied list for later removal from source
-//          if ( move ) moveIdxs.append( curIdx );
-//          continue;
-//        }
-//        // if duplicate detected, warn
-//        else if ( error == Error::DUPLI && answer != QMessageBox::NoToAll ) {
-//          const Entry &dupEntry = target->entry(error.index());
-//          answer = QMessageBox::information(this, tr("Duplicate entry"),
-//                                            tr("Possible duplicate found for '") + entry.item() + "' (" + entry.description() +
-//                                            tr(") in target database: '") + dupEntry.item() + "' (" + dupEntry.description() +
-//                                            tr("). Continue?"),
-//                                            QMessageBox::Yes | QMessageBox::No | QMessageBox::YesToAll | QMessageBox::NoToAll);
-//        }
-        
-//        // retry item add with duplicates ignored on "yes" or "yes to all"
-//        if ( answer == QMessageBox::Yes || answer == QMessageBox::YesToAll ) {
-//          error = target->add(itemText, descText, {}, true);
-//          if (error != Error::OK) {
-//            QLOG("Unable to add to database despite ignoring duplicates?! (" << error.msg() << ")");
-//            return;
-//          }
-//          if ( move ) moveIdxs.append( curIdx );
-//        }
-//      } // not YesToAll
-//    } // iterate over input indexes        
-    
-//  }
-  
-//}
+  const int count = quiz_->questionCount();
+  const auto stats = quiz_->stats();
+  emit quizFinished(TITLE_QUIZ_DONE, MSG_QUIZ_DONE.arg(stats.curQuestion).arg(count).arg(stats.complete(count))
+            .arg(stats.count(SUCCESS)).arg(stats.percent(SUCCESS))
+            .arg(stats.count(FAIL)).arg(stats.percent(FAIL))
+            .arg(stats.count(NOCHANGE)).arg(stats.percent(NOCHANGE)));
+}
+
+void Backend::continueQuiz() {
+  Q_ASSERT(quiz_)
+  Q_ASSERT(!quiz_->finished());
+  emit quizQuestion(quiz_->questionText(), 
+                    quiz_->answerText(), 
+                    STATUS_QUIZ.arg(quiz_->questionIndex()).arg(quiz_->questionCount()).arg(quiz_->questionLevel()).arg(quiz_->questionFails()));  
+}
 
 Database* Backend::database(const QString &name) const {
   if ( name.isEmpty() ) return nullptr;

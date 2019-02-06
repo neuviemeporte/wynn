@@ -23,7 +23,11 @@ public:
   enum Answer {
     ANS_NONE, ANS_YES, ANS_YESALL, ANS_NO, ANS_NOALL, ANS_CANCEL
   };
+  enum Result {
+    CORRECT, INCORRECT, UNSURE
+  };
   Q_ENUM(Answer)
+  Q_ENUM(Result)
   
 private:
   QList<db::Database*> databases_;
@@ -56,7 +60,8 @@ public:
   void dbaseEntryFind(const QModelIndexList &selection);
   void dbaseExport(const QModelIndexList &selection, const QString &path);
   void dbaseReset();
-  void dbaseQuiz(const QModelIndexList &selection, const db::QuizSettings &settings);
+  void quizStart(const QModelIndexList &selection, const db::QuizSettings &settings);
+  void quizAnswer(const Result res);
   
 signals:
   void warning(const QString &title, const QString &msg);
@@ -71,7 +76,8 @@ signals:
   void dbaseRemoved(const QString &name);
   void dbaseUpdated(const int where);
   void dbaseEntry(const QString &title, const QString &item, const QString &desc);
-  void quizQuestion(const QString &qtext, const QString &atext);
+  void quizQuestion(const QString &qtext, const QString &atext, const QString &status);
+  void quizFinished(const QString &title, const QString &stats);
   
 protected:
   enum Operation {
@@ -86,7 +92,9 @@ protected:
   bool checkCurrentDatabase();
   void cleanupOperation();
   void continueOperation();
-  bool handleDuplicate(const db::Database *dbase, const db::Error &error, const QString &item, const QString &desc);
+  bool handleDuplicate(const db::Error &error, const db::Database *dbase, const QString &item, const QString &desc);
+  void finishQuiz(const bool saveResults);
+  void continueQuiz();
 };
 
 } // namespace app

@@ -69,6 +69,8 @@ public slots:
   void slot_backend_getItem(const QString &title, const QString &msg, const QStringList &options);
   void slot_backend_getText(const QString &title, const QString &msg);
   void slot_backend_dbaseEntry(const QString &title, const QString &item, const QString &desc);
+  void slot_backend_quizQuestion(const QString &qtext, const QString &atext, const QString &status);
+  void slot_backend_quizFinished(const QString &title, const QString &stats);
   
   // dictionary panel
   void slot_dict_switchPlugin(int plugIdx);
@@ -104,10 +106,10 @@ public slots:
   // database quiz funcionality
   void slot_database_quizClicked();
   void slot_quiz_typeChanged();
+  void slot_quiz_revealClicked();
   void slot_quiz_correctClicked();
   void slot_quiz_incorrectClicked();
   void slot_quiz_unsureClicked();
-  void slot_quiz_revealClicked();
   void slot_quiz_closeClicked();
   
   // settings
@@ -149,8 +151,6 @@ protected:
   void setQuizControlsEnabled(bool arg);
   void displayQuizQuestion();
   void reveaQuizAnswer();
-  void finishQuiz(const bool saveResults);
-  
   void closeEvent(QCloseEvent *event);
 };
 
