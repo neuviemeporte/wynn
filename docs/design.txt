@@ -177,6 +177,8 @@ backend::continueOperation():
         found < 0:
             warning("Nothing found") -> ui::slot_backend_warning();
         dbaseFound(found) -> ui::slot_backend_dbaseEntryFound();
+    curOp == QUIZ:
+        continueQuiz();
     else: 
         error(); // no operation to continue
 
@@ -295,8 +297,7 @@ ui::slot_database_exportClicked():
     backend.dbaseExport(path);
 
 backend::dbaseExport(path):
-    !dbase:
-        warning() -> ui::slot_backend_warning();
+    !checkCurrentDatabase():
         return;
     curDbase.export(path);
     status(path) -> ui::slot_backend_status();
@@ -308,29 +309,38 @@ ui::slot_database_resetClicked():
         backend.dbaseReset();
 
 backend::dbaseReset():
-    !dbase:
-        warning() -> ui::slot_backend_warning();
+    !checkCurrentDatabase():
         return;
     curDbase.reset();
 
 // [WYNN_1.12]
 ui::slot_database_quizClicked():
     // TODO: quiz item count from backend for settings?
+    selection = dbaseSelection();
     settings = getQuizSettings();
-    backend.dbaseQuiz(settings);
+    backend.quizStart(settings, selection);
 
-backend::dbaseQuiz(settings):
-    !dbase:
-        warning() -> ui::slot_backend_warning();
+backend::quizStart(settings):
+    !checkCurrentDatabase():
         return;
-    quiz = Quiz(curDbase, settings);
+    quiz = Quiz(curDbase, settings, selection);
     quiz.empty():
         warning("No questions") -> ui::slot_backend_warning();
+        quizFinish(false);
         return;
     curOp = QUIZ;
     curDbase.lock(); // disallow modification to dbase while quiz in progress
-    quizQuestion(quiz.questionText(), quiz.answerText()) 
-        -> ui::slot_database_quizQuestion();
+    continueQuiz();
+
+backend::continueQuiz():
+    quiz.finished() || answer == YES:
+        quizFinish(true);
+        return;
+    answer == NO:
+        quizFinish(false);
+        return;
+    quizQuestion(quiz.questionText(), quiz.answerText(), status) 
+        -> ui::slot_quiz_question();
 
 ui::slot_quiz_question(q, a):
     quizDialog.setText(QUESTION, q);
@@ -351,25 +361,29 @@ ui::slot_quiz_unsureClicked():
 
 backend::quizAnswer(type);
     quiz.answer(type);
-    quiz.done():
-        quizDone() -> ui::slot_quiz_done();
-        return;
-    quizQuestion(quiz.questionText(), quiz.answerText()) 
-        -> ui::slot_database_quizQuestion();
+    continueQuiz();
 
-ui::slot_quiz_done():
-    quizDialog.hide();
-    backend.quizFinish(true);
-
-backend.quizFinish(save):
+backend::quizFinish(save):
     save:
         quiz.saveResults();
+        stats = quiz.stats();
     delete quiz;
+    quizFinished(stats) -> ui::slot_quiz_finished();
+
+ui::slot_quiz_finished(stats):
+    stats:
+        stats.display();
+    quizDialog.hide();
 
 ui::slot_quiz_cancelClicked():
-    ans = Dialog("Save partial results?");
-    ans == CANCEL:
+    ignorable = quizDialog.visible();
+    backend.quizInterrupt(ignorable);
+
+backend::quizInterrupt(ignorable)
+    !quiz.haveAnswers():
+        quizFinish(false);
         return;
-    quizDialog.hide();
-    save = (ans == YES);
-    backend.quizFinish(save);
+    options = { YES, NO, ignorable ? CANCEL };
+    emit question("Save partial results?", options) 
+        -> ui::slot_backend_question()
+

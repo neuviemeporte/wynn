@@ -283,8 +283,7 @@ void Backend::quizStart(const QModelIndexList &selection, const QuizSettings &se
     emit warning(tr("No questions"), 
                  tr("The current combination of quiz settings yielded no questions to be asked. "
                     "Change the settings or select some entries from the table by hand and try again."));
-    delete quiz_;
-    quiz_ = nullptr;
+    finishQuiz(false);
     return;
   }
   curOp_ = OP_QUIZ;
@@ -305,8 +304,7 @@ void Backend::quizAnswer(const Backend::Result res) {
   Q_ASSERT(quiz_);
   Q_ASSERT(!quiz_->finished());
   quiz_->answer(ans);
-  if (quiz_->finished()) finishQuiz(true);
-  else continueQuiz();
+  continueQuiz();
 }
 
 // TODO: execute actual work on separate thread
@@ -455,9 +453,6 @@ void Backend::finishQuiz(const bool saveResults) {
   QLOGX("Quiz done");
   Q_ASSERT(quiz_);
   if (saveResults) quiz_->saveResults();
-  curDbase_->setLocked(false);
-  delete quiz_;
-  quiz_ = nullptr;
   
   const int count = quiz_->questionCount();
   const auto stats = quiz_->stats();
@@ -465,11 +460,26 @@ void Backend::finishQuiz(const bool saveResults) {
             .arg(stats.count(SUCCESS)).arg(stats.percent(SUCCESS))
             .arg(stats.count(FAIL)).arg(stats.percent(FAIL))
             .arg(stats.count(NOCHANGE)).arg(stats.percent(NOCHANGE)));
+  
+  curDbase_->setLocked(false);
+  delete quiz_;
+  quiz_ = nullptr;
+  curOp_ == OP_NONE;
 }
 
 void Backend::continueQuiz() {
-  Q_ASSERT(quiz_)
-  Q_ASSERT(!quiz_->finished());
+  Q_ASSERT(quiz_);
+  // no more questions in quiz or user interrupted quiz and asked to save partial results - finish quiz
+  if (quiz_->finished() || answer_ == ANS_YES) {
+    finishQuiz(true);
+    return;
+  // user interrupted quiz and asked not to save partial results - finish quiz
+  } else if ( answer_ == ANS_NO ) {
+    finishQuiz(false);
+    return;
+  }
+  
+  // provide next question to UI
   emit quizQuestion(quiz_->questionText(), 
                     quiz_->answerText(), 
                     STATUS_QUIZ.arg(quiz_->questionIndex()).arg(quiz_->questionCount()).arg(quiz_->questionLevel()).arg(quiz_->questionFails()));  
