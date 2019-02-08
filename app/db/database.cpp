@@ -125,7 +125,7 @@ Error Database::remove(int idx) {
     return Error::OK;
 }
 
-Error Database::remove(const QList<int> &idxs)
+Error Database::remove(const std::list<int> &idxs)
 {
     QLOGX("Removing " << idxs.count() << " items");
     if (locked()) return Error::LOCK;

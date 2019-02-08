@@ -6,6 +6,12 @@
 #include <map>
 
 namespace wynn {
+
+using db::Database;
+using db::QuizSettings;
+using db::Quiz;
+using db::Entry;
+
 namespace app {
 
 static const QString VERSION     = "0.9.6";
@@ -14,7 +20,7 @@ static const QString SETT_EXTDIR = "extdir";
 static const QString SETT_NODUPS = "nodbdups";
 static const QString SETT_CURDB  = "curdb";
 
-static const std::map<Backend::Operation, std::string> OP_STR = {
+const std::map<Backend::Operation, std::string> Backend::OP_STR = {
   { Backend::OP_NONE,       "NONE"       },
   { Backend::OP_ENTRY_ADD,  "ENTRY_ADD"  },
   { Backend::OP_ENTRY_DEL,  "ENTRY_DEL"  },
@@ -25,46 +31,48 @@ static const std::map<Backend::Operation, std::string> OP_STR = {
   { Backend::OP_QUIZ,       "QUIZ"       } 
 };
 
-static const std::map<Backend::Answer, std::string> ANS_STR = {
-  { Backend::ANS_NONE,   "NONE" },  
-  { Backend::ANS_YES,    "YES" },   
+const std::map<Backend::Answer, std::string> Backend::ANS_STR = {
+  { Backend::ANS_NONE,   "NONE"   },  
+  { Backend::ANS_YES,    "YES"    },   
   { Backend::ANS_YESALL, "YESALL" },
-  { Backend::ANS_NO,     "NO" },    
-  { Backend::ANS_NOALL,  "NOALL" },
-  { Backend::ANS_CANCEL, "CANCEL" },
+  { Backend::ANS_NO,     "NO"     },    
+  { Backend::ANS_NOALL,  "NOALL"  },
+  { Backend::ANS_CANCEL, "CANCEL" }
 };
 
 // TODO: move all strings to UI?
-static const QString 
-  TITLE_DUPLICATE = tr("Accept duplicate?"),
-  TITLE_ERROR = tr("Error"),
-  TITLE_ENTRYDEL = tr("Delete items?"),
-  TITLE_TARGET = tr("Select target"),
-  TITLE_EDIT = tr("Edit item"),
-  TITLE_FIND = tr("Find item in database"),
-  TITLE_FIND_FAIL = tr("No results"), 
-  TITLE_EXPORT_FAIL = tr("Unable to export"),
-  TITLE_QUIZ_DONE = tr("Done"),
-  MSG_DUPLICATE = tr(
-      "A similar entry was found to already exist in the database:\n"
-      "'%1' / '%2' (%3).\n"
-      "While trying to add entry:\n"
-      "'%4' / '%5'\n"
-      "Do you want to add it anyway?"),
-  MSG_ENTRYDEL = tr("Are you sure you want to remove %1 items from database '%2'?"),
-  MSG_NOTARGET = tr("No eligible target database exists. Create one and retry."),
-  MSG_MOVE = tr("Move %1 entries to database:"),
-  MSG_COPY = tr("Copy %1 entries to database:"),
-  MSG_FIND = tr("Please enter an expression to search for:"),
-  MSG_FIND_FAIL = tr("Sorry, no results were found for '%1'."),
-  MSG_EXPORT_SUCCESS = tr("Exported database to '%1'"),
-  MSG_EXPORT_FAIL = tr("Couldn't open file for writing: '%1'."),
-  STATUS_QUIZ = tr("Question %1 of %2 (level: %3, failures: %4"),
-  MSG_QUIZ_DONE = tr("Quiz completed.\n\n"
-                     "Questions answered: %1 of %2 (%3%%)\n"
-                     "Correct answers: %4 (%5%%)\n"
-                     "Incorrect answers: %6 (%7%%)\n"
-                     "Unsure answers: %8 (%9%%)\n");
+const QString 
+  TITLE_DUPLICATE      = Backend::tr("Accept duplicate?"),
+  TITLE_ERROR          = Backend::tr("Error"),
+  TITLE_ENTRYDEL       = Backend::tr("Delete items?"),
+  TITLE_TARGET         = Backend::tr("Select target"),
+  TITLE_EDIT           = Backend::tr("Edit item"),
+  TITLE_FIND           = Backend::tr("Find item in database"),
+  TITLE_FIND_FAIL      = Backend::tr("No results"), 
+  TITLE_EXPORT_FAIL    = Backend::tr("Unable to export"),
+  TITLE_QUIZ_STATS     = Backend::tr("Done"),
+  TITLE_QUIZ_SAVE      = Backend::tr("Save results?"),
+  MSG_DUPLICATE        = Backend::tr("A similar entry was found to already exist in the database:\n"
+                                     "'%1' / '%2' (%3).\n"
+                                     "While trying to add entry:\n"
+                                     "'%4' / '%5'\n"
+                                     "Do you want to add it anyway?"),
+  MSG_ENTRYDEL         = Backend::tr("Are you sure you want to remove %1 items from database '%2'?"),
+  MSG_NOTARGET         = Backend::tr("No eligible target database exists. Create one and retry."),
+  MSG_MOVE             = Backend::tr("Move %1 entries to database:"),
+  MSG_COPY             = Backend::tr("Copy %1 entries to database:"),
+  MSG_FIND             = Backend::tr("Please enter an expression to search for:"),
+  MSG_FIND_FAIL        = Backend::tr("Sorry, no results were found for '%1'."),
+  MSG_EXPORT_SUCCESS   = Backend::tr("Exported database to '%1'"),
+  MSG_EXPORT_FAIL      = Backend::tr("Couldn't open file for writing: '%1'."),
+  STATUS_QUIZ          = Backend::tr("Question %1 of %2 (level: %3, failures: %4"),
+  MSG_QUIZ_STATS       = Backend::tr("Quiz completed.\n\n"
+                                     "Questions answered: %1 of %2 (%3%%)\n"
+                                     "Correct answers: %4 (%5%%)\n"
+                                     "Incorrect answers: %6 (%7%%)\n"
+                                     "Unsure answers: %8 (%9%%)\n"),
+  MSG_QUIZ_INTERRUPTED = Backend::tr("Quiz was interrupted. Do you want to save the partial results?"),
+  MSG_QUIZ_INCOMPLETE  = Backend::tr("Quiz was not completed. Do you want to save the partial results?");
 
 Backend::Backend() : QObject(),
   curDbase_(nullptr), 
@@ -263,8 +271,9 @@ void Backend::dbaseReset() {
   if (!checkCurrentDatabase()) return;
   Q_ASSERT(curDbase_);
   const auto error = curDbase_->reset();
-  if (error != db::Error::OK) 
+  if (error != db::Error::OK) {
     QLOG("Error reseting database: " << error);
+  }
 }
 
 void Backend::quizStart(const QModelIndexList &selection, const QuizSettings &settings) {
@@ -302,135 +311,36 @@ void Backend::quizAnswer(const Backend::Result res) {
   }
   Q_ASSERT(curOp_ == OP_QUIZ);
   Q_ASSERT(quiz_);
-  Q_ASSERT(!quiz_->finished());
   quiz_->answer(ans);
   continueQuiz();
+}
+
+void Backend::quizInterrupt(const bool ignorable) {
+  Q_ASSERT(quiz_);
+  if (quiz_->stats().empty()) {
+    // no answers in this quiz, finish silently
+    finishQuiz(false);
+    return;
+  }
+  
+  if (ignorable)
+    emit question(TITLE_QUIZ_SAVE, MSG_QUIZ_INCOMPLETE, { ANS_YES, ANS_NO, ANS_CANCEL });
+  else
+    emit question(TITLE_QUIZ_SAVE, MSG_QUIZ_INTERRUPTED, { ANS_YES, ANS_NO });
 }
 
 // TODO: execute actual work on separate thread
 void Backend::continueOperation() {
   QLOGX("Continuing operation: " << OP_STR[curOp_]);
-  // TODO: split into smaller functions
-  if (curOp_ == OP_ENTRY_ADD) {
-    if (answer_ == ANS_NO) {
-      QLOG("Operation was canceled");
-      return;
-    }
-    const bool dupIgnore = (answer_ == ANS_YES || answer_ == ANS_YESALL);
-    QLOG("Adding entry, item = " << entryItem_ << ", desc = " << entryDesc_ << " dupIgnore: " << dupIgnore);
-    Q_ASSERT(curDbase_);
-    Q_ASSERT(!entryItem_.isEmpty() && !entryDesc_.isEmpty());
-    const auto error = curDbase_->add(entryItem_, entryDesc_, {}, dupIgnore);
-    if (handleDuplicate(error, curDbase_, entryItem_, entryDesc_)) 
-      return;
-    
-    if (error == Error::OK) {
-      // TODO: mapToModel()
-      emit dbaseUpdated(curDbase_->entryCount());
-    } else {
-      QLOG("Unexpected error when adding entry to dbase: " << error);
-    }
-  } else if (curOp_ == OP_ENTRY_DEL) {
-    if (answer_ == ANS_YES) {
-      Q_ASSERT(curDbase_)
-      Q_ASSERT(!selection_.empty());
-      auto error = curDbase_->remove(selection_);
-      if (error != Error::OK) {
-        QLOG("Unexpected error when removing entry from dbase: " << error);
-      }
-    }
-    // TODO: reconsider focus point, maybe before first removed index?
-    emit dbaseUpdated(0);
-  } else if (curOp_ == OP_ENTRY_COPY || curOp_ == OP_ENTRY_MOVE) {
-    auto target = database(response_);
-    Q_ASSERT(curDbase_);
-    Q_ASSERT(target);
-    Q_ASSERT(!selection_.empty());
-    // iterate over entries for copy/move
-    for (auto it = selection_.begin(); it != selection_.end();) {
-      const int idx = *it;
-      QLOG("Processing index: " << idx << ", answer = " << ANS_STR[answer_]);
-      // TODO: rollback previous steps in case of cancel
-      if (answer_ == ANS_CANCEL) {
-        QLOG("Operation canceled by user");
-        break;
-      }
-      // when user answered "no", skip copy/move
-      if (answer_ != ANS_NO) {
-        const bool dupIgnore = (answer_ == ANS_YES || ANS_YESALL);
-        const auto &entry = curDbase_->entry(idx);
-        // try to add entry to target database
-        const auto addError = target->add(entry.item(), entry.description(), {}, dupIgnore);
-        // ask user about handling of duplicate unless they already answered "no to all"
-        if (handleDuplicate(error, target, entry.item(), entry.description())) 
-          return;
-        // remove entry from source database when add to target successful and we are in move mode
-        // TODO: implement move operation as atomic on database level
-        if (addError == Error::OK && curOp_ == OP_ENTRY_MOVE) {
-          auto removeError = curDbase_->remove(idx);
-          if (removeError != Error::OK) {
-            QLOG("Unexpected error while removing entry: " << removeError);
-          }
-        }
-      }
-      // yes/no valid only for one iteration, reset answer for next one
-      if (answer_ == ANS_YES || answer_ == ANS_NO) answer_ = ANS_NONE;
-      // remove index processed in this iteration from list
-      it = selection_.erase(it);
-    }
-    QLOG("Done with copy/move operation");
-  } else if (curOp_ == OP_ENTRY_EDIT) {
-    if (answer_ == ANS_NO) {
-      QLOG("User cancelled entry dialog, interrupting edit operation");
-      return;
-    }
-    Q_ASSERT(!selection_.empty());
-    Q_ASSERT(curDbase_);
-    const int alterIdx = selection_.front();
-    const bool dupIgnore = (answer_ == ANS_YES);
-    const auto error = curDbase_->alter(alterIdx, entryItem_, entryDesc_, dupIgnore);
-    if (handleDuplicate(error, curDbase_, entryItem_, entryDesc_)) {
-      QLOG("Asked user about duplicate, might retry later");
-      return;
-    }
-    else if (error != db::Error::OK) {
-      QLOG("Unexpected error while altering entry: " << error);
-      return;
-    }
-    
-    if (answer_ == ANS_YES || answer_ == ANS_NO) answer_ = ANS_NONE;
-    selection_.pop_front();
-    // show user next entry to edit
-    if (!selection_.empty()) {
-      const auto &entry = curDbase_->entry(selection_.front());
-      emit dbaseEntry(TITLE_EDIT, entry.item(), entry.description());
-    }
-    else {
-      QLOG("Done with edit operation");
-      emit dbaseUpdated(alterIdx);
-    }
-  } else if (curOp_ == OP_ENTRY_FIND) {
-    Q_ASSERT(curDbase_);
-    const int startIdx = (selection_.empty() ? 0 : selection_.front() + 1);
-    // first iteration, try searching from current position onwards
-    // TODO: this doesn't make sense due to dbase view sorting, change implementation
-    // to search and return matches in bulk, return results to UI and add controls for
-    // jumping between them
-    int found = curDbase_->findEntry(response_, startIdx);
-    if (found < 0 && startIdx != 0) {
-      QLOG("Nothing found, try again from beginning");
-      found = curDbase_->findEntry(response_, 0);
-    }
-    if (found < 0) {
-      QLOG("Nothing found second time around, giving up");
-      emit warning(TITLE_FIND_FAIL, MSG_FIND_FAIL.arg(response_));
-    }
-    else {
-      const int row = dbaseProxyModel_->mapFromSource(dbaseModel_->index(found, 0)).row();
-      QLOG("Found matching result at index " << found << " -> row " << row);
-      emit dbaseUpdated(row);
-    }
-  } else {
+  switch (curOp_) {
+  case OP_ENTRY_ADD:  continueAdd(); break;
+  case OP_ENTRY_DEL:  continueDel(); break;
+  case OP_ENTRY_COPY: // fall-through
+  case OP_ENTRY_MOVE: continueCopy(); break;
+  case OP_ENTRY_EDIT: continueEdit(); break;
+  case OP_ENTRY_FIND: continueFind(); break;
+  case OP_QUIZ:       continueQuiz(); break;
+  default:
     QLOG("Unsupported operation: " << curOp_);
   }
 }
@@ -443,28 +353,166 @@ bool Backend::handleDuplicate(const db::Error &error, const db::Database *dbase,
   QLOGX("Handing duplicate of " << item << "/" << desc << " in database '" << dbase->name() << "' at index " << dupIdx);
   // TODO: could be duplicate of multiple items, show all of them in the dialog, preferably sorted in order of similarity
   const Entry &dupEntry = dbase->entry(dupIdx);
-  emit question(TITLE_DUPLICATE, 
-                MSG_DUPLICATE.arg(dupEntry.item()).arg(dupEntry.description()).arg(dupIdx + 1).arg(item).arg(desc), 
-                { ANS_YES, ANS_NO });
+  emit question(TITLE_DUPLICATE, MSG_DUPLICATE
+                .arg(dupEntry.item())
+                .arg(dupEntry.description())
+                .arg(dupIdx + 1)
+                .arg(item).arg(desc), { ANS_YES, ANS_NO });
   return true;
 }
 
 void Backend::finishQuiz(const bool saveResults) {
   QLOGX("Quiz done");
   Q_ASSERT(quiz_);
-  if (saveResults) quiz_->saveResults();
+  QString statsMsg;
+  // save results and emit stats only for quizzes which have answered questions
+  if (saveResults && !quiz_->stats().empty()) {
+    quiz_->saveResults();
+    const int count = quiz_->questionCount();
+    const auto stats = quiz_->stats();
+    statsMsg = MSG_QUIZ_STATS
+        .arg(stats.curQuestion).arg(count).arg(stats.complete(count))
+        .arg(stats.count(db::QUIZ_SUCCESS)).arg(stats.percent(db::QUIZ_SUCCESS))
+        .arg(stats.count(db::QUIZ_FAIL)).arg(stats.percent(db::QUIZ_FAIL))
+        .arg(stats.count(db::QUIZ_NOCHANGE)).arg(stats.percent(db::QUIZ_NOCHANGE));
+  }
+  emit quizFinished(TITLE_QUIZ_STATS, statsMsg);
   
-  const int count = quiz_->questionCount();
-  const auto stats = quiz_->stats();
-  emit quizFinished(TITLE_QUIZ_DONE, MSG_QUIZ_DONE.arg(stats.curQuestion).arg(count).arg(stats.complete(count))
-            .arg(stats.count(SUCCESS)).arg(stats.percent(SUCCESS))
-            .arg(stats.count(FAIL)).arg(stats.percent(FAIL))
-            .arg(stats.count(NOCHANGE)).arg(stats.percent(NOCHANGE)));
-  
+  // cleanup
   curDbase_->setLocked(false);
   delete quiz_;
   quiz_ = nullptr;
-  curOp_ == OP_NONE;
+  cleanupOperation();
+}
+
+void Backend::continueAdd() {
+  if (answer_ == ANS_NO) {
+    QLOG("Operation was canceled");
+    return;
+  }
+  const bool dupIgnore = (answer_ == ANS_YES || answer_ == ANS_YESALL);
+  QLOG("Adding entry, item = " << entryItem_ << ", desc = " << entryDesc_ << " dupIgnore: " << dupIgnore);
+  Q_ASSERT(curDbase_);
+  Q_ASSERT(!entryItem_.isEmpty() && !entryDesc_.isEmpty());
+  const auto error = curDbase_->add(entryItem_, entryDesc_, {}, dupIgnore);
+  if (handleDuplicate(error, curDbase_, entryItem_, entryDesc_)) 
+    return;
+  
+  if (error == db::Error::OK) {
+    // TODO: mapToModel()
+    emit dbaseUpdated(curDbase_->entryCount());
+  } else {
+    QLOG("Unexpected error when adding entry to dbase: " << error);
+  }
+}
+
+void Backend::continueDel() {
+  if (answer_ == ANS_YES) {
+    Q_ASSERT(curDbase_);
+    Q_ASSERT(!selection_.empty());
+    auto error = curDbase_->remove(selection_);
+    if (error != db::Error::OK) {
+      QLOG("Unexpected error when removing entry from dbase: " << error);
+    }
+  }
+  // TODO: reconsider focus point, maybe before first removed index?
+  emit dbaseUpdated(0);  
+}
+
+void Backend::continueCopy() {
+  auto target = database(response_);
+  Q_ASSERT(curDbase_);
+  Q_ASSERT(target);
+  Q_ASSERT(!selection_.empty());
+  // iterate over entries for copy/move
+  for (auto it = selection_.begin(); it != selection_.end();) {
+    const int idx = *it;
+    QLOG("Processing index: " << idx << ", answer = " << ANS_STR[answer_]);
+    // TODO: rollback previous steps in case of cancel
+    if (answer_ == ANS_CANCEL) {
+      QLOG("Operation canceled by user");
+      break;
+    }
+    // when user answered "no", skip copy/move
+    if (answer_ != ANS_NO) {
+      const bool dupIgnore = (answer_ == ANS_YES || answer_ == ANS_YESALL);
+      const auto &entry = curDbase_->entry(idx);
+      // try to add entry to target database
+      const auto addError = target->add(entry.item(), entry.description(), {}, dupIgnore);
+      // ask user about handling of duplicate unless they already answered "no to all"
+      if (handleDuplicate(addError, target, entry.item(), entry.description())) 
+        return;
+      // remove entry from source database when add to target successful and we are in move mode
+      // TODO: implement move operation as atomic on database level
+      if (addError == db::Error::OK && curOp_ == OP_ENTRY_MOVE) {
+        auto removeError = curDbase_->remove(idx);
+        if (removeError != db::Error::OK) {
+          QLOG("Unexpected error while removing entry: " << removeError);
+        }
+      }
+    }
+    // yes/no valid only for one iteration, reset answer for next one
+    if (answer_ == ANS_YES || answer_ == ANS_NO) answer_ = ANS_NONE;
+    // remove index processed in this iteration from list
+    it = selection_.erase(it);
+  }
+  QLOG("Done with copy/move operation");  
+}
+
+void Backend::continueEdit() {
+  if (answer_ == ANS_NO) {
+    QLOG("User cancelled entry dialog, interrupting edit operation");
+    return;
+  }
+  Q_ASSERT(!selection_.empty());
+  Q_ASSERT(curDbase_);
+  const int alterIdx = selection_.front();
+  const bool dupIgnore = (answer_ == ANS_YES);
+  const auto error = curDbase_->alter(alterIdx, entryItem_, entryDesc_, dupIgnore);
+  if (handleDuplicate(error, curDbase_, entryItem_, entryDesc_)) {
+    QLOG("Asked user about duplicate, might retry later");
+    return;
+  }
+  else if (error != db::Error::OK) {
+    QLOG("Unexpected error while altering entry: " << error);
+    return;
+  }
+  
+  if (answer_ == ANS_YES || answer_ == ANS_NO) answer_ = ANS_NONE;
+  selection_.pop_front();
+  // show user next entry to edit
+  if (!selection_.empty()) {
+    const auto &entry = curDbase_->entry(selection_.front());
+    emit dbaseEntry(TITLE_EDIT, entry.item(), entry.description());
+  }
+  else {
+    QLOG("Done with edit operation");
+    emit dbaseUpdated(alterIdx);
+  }  
+}
+
+
+void Backend::continueFind() {
+  Q_ASSERT(curDbase_);
+  const int startIdx = (selection_.empty() ? 0 : selection_.front() + 1);
+  // first iteration, try searching from current position onwards
+  // TODO: this doesn't make sense due to dbase view sorting, change implementation
+  // to search and return matches in bulk, return results to UI and add controls for
+  // jumping between them
+  int found = curDbase_->findEntry(response_, startIdx);
+  if (found < 0 && startIdx != 0) {
+    QLOG("Nothing found, try again from beginning");
+    found = curDbase_->findEntry(response_, 0);
+  }
+  if (found < 0) {
+    QLOG("Nothing found second time around, giving up");
+    emit warning(TITLE_FIND_FAIL, MSG_FIND_FAIL.arg(response_));
+  }
+  else {
+    const int row = dbaseProxyModel_->mapFromSource(dbaseModel_->index(found, 0)).row();
+    QLOG("Found matching result at index " << found << " -> row " << row);
+    emit dbaseUpdated(row);
+  }  
 }
 
 void Backend::continueQuiz() {
@@ -474,7 +522,7 @@ void Backend::continueQuiz() {
     finishQuiz(true);
     return;
   // user interrupted quiz and asked not to save partial results - finish quiz
-  } else if ( answer_ == ANS_NO ) {
+  } else if (answer_ == ANS_NO) {
     finishQuiz(false);
     return;
   }

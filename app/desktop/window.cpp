@@ -56,6 +56,19 @@ const QString PLUG_EXT = ".dll";
 const int MSG_TIMEOUT = 2000;
 } // namespace
 
+class QuizDialogEventFilter : public QObject {
+  Q_OBJECT
+
+protected:
+  QDialog *parent_;
+  Ui::QuizDialog *dialogUI_;
+  bool eventFilter(QObject *obj, QEvent *event);
+  
+public:
+  QuizDialogEventFilter(QDialog *parent, Ui::QuizDialog *dialogUI) 
+    : QObject(parent), parent_(parent), dialogUI_(dialogUI) {}
+};
+
 // ==============================================================================================
 // ============================== MainForm: public
 // ==============================================================================================
@@ -123,7 +136,7 @@ MainForm::MainForm(ExtBackend *backend) : QMainWindow(nullptr),
   // Backend signals
   connect(backend_, SIGNAL(warning(QString, QString)), this, SLOT(slot_backend_warning(QString, QString)));
   connect(backend_, SIGNAL(error(QString, QString)), this, SLOT(slot_backend_error(QString, QString)));
-  connect(backend_, SIGNAL(status(QString)), this, SLOT(slot_backend_status(QString));
+  connect(backend_, SIGNAL(status(QString)), this, SLOT(slot_backend_status(QString)));
   connect(backend_, SIGNAL(question(QString, QString, QVector<Backend::Answer>)), this, SLOT(slot_backend_question(QString, QString, QVector<Backend::Answer>)));
   connect(backend_, SIGNAL(getItem(QString, QString, QStringList)), this, SLOT(slot_backend_getItem(QString,QString,QStringList)));
   connect(backend_, SIGNAL(getText(QString, QString)), this, SLOT(slot_backend_getText(QString,QString)));
@@ -133,7 +146,7 @@ MainForm::MainForm(ExtBackend *backend) : QMainWindow(nullptr),
   connect(backend_, SIGNAL(dbaseUpdated(const int)), this, SLOT(slot_database_updated(const int)));
   connect(backend_, SIGNAL(dbaseEntry(QString, QString, QString)), this, SLOT(slot_backend_dbaseEntry(QString, QString, QString)));
   connect(backend_, SIGNAL(quizQuestion(QString,QString,QString)), this, SLOT(slot_backend_quizQuestion(QString,QString)));
-  connect(backend_, SIGNAL(quizFinished(QString,QString), this, SLOT(slot_backend_quizFinished(QString,QString)));
+  connect(backend_, SIGNAL(quizFinished(QString,QString)), this, SLOT(slot_backend_quizFinished(QString,QString)));
   connect(backend_, SIGNAL(dictResults()), this, SLOT(slot_dict_results()));
   
   // Main stack widget page changing buttons
@@ -244,23 +257,28 @@ void MainForm::slot_backend_status(const QString &msg) {
   slot_statusMessage(msg);
 }
 
-void MainForm::slot_backend_question(const QString &title, const QString &msg, const QVector<Backend::Answer> &options)
-{
+void MainForm::slot_backend_question(const QString &title, const QString &msg, const QVector<Backend::Answer> &options) {
   QMessageBox::StandardButtons buttons = QMessageBox::NoButton;
   for (auto &op : options) switch (op) {
-    case Backend::ANS_YES:    buttons |= QMessageBox::Yes;    break;
-    case Backend::ANS_NO:     buttons |= QMessageBox::No;     break;
-    case Backend::ANS_YESALL: buttons |= QMessageBox::YesAll; break;
-    case Backend::ANS_NOALL:  buttons |= QMessageBox::NoAll;  break;
-    case Backend::ANS_CANCEL: buttons |= QMessageBox::Cancel; break;
+  case Backend::ANS_YES:    buttons |= QMessageBox::Yes;    break;
+  case Backend::ANS_NO:     buttons |= QMessageBox::No;     break;
+  case Backend::ANS_YESALL: buttons |= QMessageBox::YesAll; break;
+  case Backend::ANS_NOALL:  buttons |= QMessageBox::NoAll;  break;
+  case Backend::ANS_CANCEL: buttons |= QMessageBox::Cancel; break;
+  default: 
+    QLOGX("Unrecognized option: " << op);
+    return;
   }
   Backend::Answer ans = Backend::ANS_NONE;
   switch (QMessageBox::question(this, title, msg, buttons)) {
-    case QMessageBox::Yes   : ans = Backend::ANS_YES;    break;
-    case QMessageBox::No    : ans = Backend::ANS_NO;     break;
-    case QMessageBox::YesAll: ans = Backend::ANS_YESALL; break;
-    case QMessageBox::NoAll : ans = Backend::ANS_NOALL;  break;
-    case QMessageBox::Cancel: ans = Backend::ANS_CANCEL; break;
+  case QMessageBox::Yes   : ans = Backend::ANS_YES;    break;
+  case QMessageBox::No    : ans = Backend::ANS_NO;     break;
+  case QMessageBox::YesAll: ans = Backend::ANS_YESALL; break;
+  case QMessageBox::NoAll : ans = Backend::ANS_NOALL;  break;
+  case QMessageBox::Cancel: ans = Backend::ANS_CANCEL; break;
+  default:
+    QLOGX("Unrecognized answer: " << ans);
+    return;
   }
   backend_->setAnswer(ans);
 }
@@ -307,7 +325,8 @@ void MainForm::slot_backend_quizQuestion(const QString &qtext, const QString &at
 
 void MainForm::slot_backend_quizFinished(const QString &title, const QString &stats) {
   QLOGX("Quiz finished");
-  QMessageBox::information(this, title, stats);
+  if (!stats.isEmpty())
+    QMessageBox::information(this, title, stats);
   quizDialog_->hide();
   setQuizControlsEnabled(true);
 }
@@ -400,7 +419,7 @@ void MainForm::slot_database_changeCurrent(const QString& text) {
   QLOGX("Current database changed to: '" << text << "'");
   // enable or disable ui elements depending on whether the dbase combo box is empty or not
   const bool haveItem = !text.isEmpty();
-  for (QWidget *widget : { ui_.databaseCombo, ui_.saveButton, ui_.deleteButton, ui_.dbaseAddButton, ui_.dbaseRemoveButton, 
+  for (auto *widget : std::vector<QWidget*>{ ui_.databaseCombo, ui_.saveButton, ui_.deleteButton, ui_.dbaseAddButton, ui_.dbaseRemoveButton, 
         ui_.dbaseCopyButton, ui_.dbaseMoveButton, ui_.dbaseEditButton, ui_.dbaseFindButton, ui_.dbaseExportButton, ui_.dbaseResetButton, 
         ui_.quizButton }) widget->setEnabled( haveItem );
   backend_->dbaseSwitch(text);
@@ -511,7 +530,7 @@ void MainForm::slot_database_updated(const int where) {
   QLOGX("Database updated, focus: " << where);
   ui_.databaseTable->setFocus(Qt::OtherFocusReason);
   ui_.databaseTable->selectRow(where);
-  slot_database_countUpdate(entryCount);
+  // FIXME: slot_database_countUpdate(entryCount);
 }
 
 // remove button clicked in database panel
@@ -568,7 +587,7 @@ void MainForm::slot_database_findClicked() {
 
 void MainForm::slot_database_exportClicked() {
   QLOGX("Database export button clicked");
-  const QString path = QFileDialog::getSaveFileName(this, tr("Export database"), QDir::homePath(), "HTML (*.htm *.html)");
+  QString path = QFileDialog::getSaveFileName(this, tr("Export database"), QDir::homePath(), "HTML (*.htm *.html)");
   if ( path.isEmpty() ) {
     QLOG("No file selected to save");
     return;
@@ -634,9 +653,10 @@ void MainForm::slot_database_quizClicked() {
 // TODO: remove after moving quiz controls to separate dialog, display both directions' points in table view
 void MainForm::slot_quiz_typeChanged() {
   QLOGX("Radio button selection changed in quiz type button group");
-  QuizDirection type = curQuizType();
-  Q_ASSERT(dbaseModel_ != nullptr);
-  dbaseModel_->setQuizType(type);
+  // FIXME:
+//  QuizDirection type = curQuizType();
+//  Q_ASSERT(dbaseModel_ != nullptr);
+//  dbaseModel_->setQuizType(type);
 }
 
 void MainForm::slot_quiz_revealClicked() {
@@ -664,87 +684,43 @@ void MainForm::slot_quiz_unsureClicked() {
 }
 
 void MainForm::slot_quiz_closeClicked() {
-  QLOGX("Close button clicked on quiz dialog");
-  
-  const int qIdx = quiz_->questionIndex();
-  // nothing answered yet, no results so close without further questions
-  if ( qIdx == 0 ) {
-    finishQuiz(false);
-    return;
-  }
-  
-  QMessageBox::StandardButtons buttons;
-  QString msg;
-  // dialog not yet closed, still visible and quiz can be resumed
-  if ( quizDialog_->isVisible() ) {
-    buttons = QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel;
-    msg = tr("Quiz will be interrupted. ");
-  }
-  // dialog already closed by [x] button with mouse
-  else {
-    buttons = QMessageBox::Yes | QMessageBox::No;
-    msg = tr("Quiz was interrupted. ");
-  }
-  
-  const auto button = QMessageBox::question(
-        GUI, tr("Quiz not complete"),
-        msg + tr("Do you want to save the partial results?"), buttons
-        );
-  
-  switch( button ) {
-  case QMessageBox::Yes: finishQuiz(true); break;
-  case QMessageBox::No: finishQuiz(false); break;
-    // don't finish quiz if cancel pressed
-  default: break;
-  }
+  const bool ignorable = quizDialog_->isVisible();
+  QLOGX("Close button clicked on quiz dialog, ignorable: " << ignorable);
+  backend_->quizInterrupt(ignorable);
 }
 
 // ==============================================================================================
 // ============================== MainForm: public slots - settings
 // ==============================================================================================
 
-void MainForm::slot_settings_altdirCheckClicked(bool arg)
-{
+void MainForm::slot_settings_altdirCheckClicked(bool arg) {
   QLOGX("Checkbox state changed to: " << arg);
-  QLOGINC;
-  if (!arg) 
-  {
+  if (!arg) {
     QLOG("Clearing external directory path");
     extDir_.clear();
     ui_.settExtDirEdit->clear();
   }
-  QLOGDEC;
 }
 
-void MainForm::slot_settings_altdirButtonClicked()
-{
+void MainForm::slot_settings_altdirButtonClicked() {
   QLOGX("User selecting directory");
-  QLOGINC;
   QString dir = QFileDialog::getExistingDirectory(this, tr("Please select directory for databases"),
                                                   (extDir_.isEmpty() ? QDir::homePath() : extDir_));
-  if (dir.isEmpty())
-  {
+  if (dir.isEmpty()) {
     QLOG("Dialog canceled, nothing done");
-    QLOGDEC;
     return;
   }
   
   reloadExternalDbases(dir);
-  
-  QLOGDEC;
 }
 
-void MainForm::slot_settings_nodupCheckClicked()
-{
+void MainForm::slot_settings_nodupCheckClicked() {
   preventDuplicates_ = ui_.settNoDuplCheck->isChecked();
   applySettings();
 }
 
-void MainForm::slot_settings_switchPlugin(int plugIdx)
-{
+void MainForm::slot_settings_switchPlugin(int plugIdx) {
   QLOGX("Switching plugin in settings panel to: " << plugIdx);
-  QLOGINC;
-  
   DictionaryPlugin *plug = plugin(plugIdx);
   Q_ASSERT(plug);
   QLOG("Plugin: " << plug->name());
@@ -769,8 +745,6 @@ void MainForm::slot_settings_switchPlugin(int plugIdx)
   Q_ASSERT(curWidget);
   curWidget->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
   stack->adjustSize();
-  
-  QLOGDEC;
 }
 
 // ==============================================================================================
@@ -1224,7 +1198,6 @@ void MainForm::displayQuizQuestion() {
 void MainForm::closeEvent(QCloseEvent *event)
 {
   QLOG("Main window close event intercepted");
-  QLOGINC;
   // iterate over user databases
   if (setupThread_)
   {
@@ -1257,7 +1230,6 @@ void MainForm::closeEvent(QCloseEvent *event)
       else if (button == QMessageBox::Cancel)
       {
         QLOG("Close interrupt requested, ignoring event");
-        QLOGDEC;
         event->ignore();
         return;
       }
@@ -1269,18 +1241,12 @@ void MainForm::closeEvent(QCloseEvent *event)
   }
   // accept the event, close application
   QLOG("Accepting close event");
-  QLOGDEC;
   event->accept();
 }
 
 // ==============================================================================================
 // ============================== QuizDialogEventFilter
 // ==============================================================================================
-
-QuizDialogEventFilter::QuizDialogEventFilter(QDialog *parent, Ui::QuizDialog *dialogUI) : QObject(parent), 
-  parent_(parent), dialogUI_(dialogUI)
-{
-}
 
 bool QuizDialogEventFilter::eventFilter(QObject *obj, QEvent *event) {
   // keyboard shortcuts for dialog buttons

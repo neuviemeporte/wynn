@@ -21,7 +21,7 @@ public:
     virtual const Entry& entry(int idx) const = 0;
     virtual Error add(const QString &item, const QString &desc, const QUuid &uuid, const bool dupIgnore) = 0;
     virtual Error remove(int idx) = 0;
-    virtual Error remove(const QList<int> &idxs) = 0;
+    virtual Error remove(const std::list<int> &idxs) = 0;
     virtual Error alter(int idx, const QString &item, const QString &desc, bool dupIgnore) = 0;
     virtual Error point(const int idx, const QuizDirection type) = 0;
     virtual Error fail(const int idx, const QuizDirection type) = 0;
@@ -73,7 +73,7 @@ public:
     // TODO: accept Entry refs instead of raw strings, support move semantics
     Error add(const QString &item, const QString &desc, const QUuid &uuid = {}, const bool dupIgnore = false) override;
     Error remove(int idx) override;
-    Error remove(const QList<int> &idxs) override;
+    Error remove(const std::list<int> &idxs) override;
     Error alter(int idx, const QString &item, const QString &desc, bool dupIgnore = false) override;
     Error point(const int idx, const QuizDirection type) override;
     Error fail(const int idx, const QuizDirection type) override;

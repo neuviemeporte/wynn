@@ -326,7 +326,7 @@ backend::quizStart(settings):
     quiz = Quiz(curDbase, settings, selection);
     quiz.empty():
         warning("No questions") -> ui::slot_backend_warning();
-        quizFinish(false);
+        finishQuiz(false);
         return;
     curOp = QUIZ;
     curDbase.lock(); // disallow modification to dbase while quiz in progress
@@ -334,10 +334,10 @@ backend::quizStart(settings):
 
 backend::continueQuiz():
     quiz.finished() || answer == YES:
-        quizFinish(true);
+        finishQuiz(true);
         return;
     answer == NO:
-        quizFinish(false);
+        finishQuiz(false);
         return;
     quizQuestion(quiz.questionText(), quiz.answerText(), status) 
         -> ui::slot_quiz_question();
@@ -363,12 +363,13 @@ backend::quizAnswer(type);
     quiz.answer(type);
     continueQuiz();
 
-backend::quizFinish(save):
-    save:
+backend::finishQuiz(save):
+    save && !stats.empty:
         quiz.saveResults();
         stats = quiz.stats();
+        quizFinished(stats) -> ui::slot_quiz_finished();
     delete quiz;
-    quizFinished(stats) -> ui::slot_quiz_finished();
+    cleanupOperation();
 
 ui::slot_quiz_finished(stats):
     stats:
@@ -381,7 +382,7 @@ ui::slot_quiz_cancelClicked():
 
 backend::quizInterrupt(ignorable)
     !quiz.haveAnswers():
-        quizFinish(false);
+        finishQuiz(false);
         return;
     options = { YES, NO, ignorable ? CANCEL };
     emit question("Save partial results?", options) 

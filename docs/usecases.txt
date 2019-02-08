@@ -82,3 +82,7 @@ WYNN_1.12: database quiz
 9b. answer present, ask whether to save partial results
 10a. user answered no, done
 10b. show summary and save results to database, done
+
+WYNN_2.1: switch dictionary plugin
+1. user switches plugin in combobox in dictionary panel (or combobox self-selects)
+2. contents of dictionary panel change to show the interface of the selected language

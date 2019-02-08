@@ -4,6 +4,7 @@
 #include "common.h"
 #include "entry.h"
 #include <vector>
+#include <list>
 
 namespace wynn {
 namespace db {
@@ -33,12 +34,13 @@ struct QuizStats {
   QuizStats() : curQuestion(0), correct(0), incorrect(0), unsure(0) {}
   int count(const QuizResult type) const {
     switch (type) {
-    case NOCHANGE: return unsure;
-    case SUCCESS:  return correct;
-    case FAIL:     return incorrect;
+    case QUIZ_NOCHANGE: return unsure;
+    case QUIZ_SUCCESS:  return correct;
+    case QUIZ_FAIL:     return incorrect;
     default: return -1;
     }
   }
+  bool empty() const { return curQuestion == 0; }
   float percent(const QuizResult type) const { return static_cast<float>(count(type) * 100) / curQuestion; }
   float complete(const int count) const { return static_cast<float>(curQuestion * 100)/count; }
 };
@@ -51,7 +53,7 @@ private:
   
 public:
   QuizQuestion(const Entry &entry, const int entryIdx) :
-    entry_(entry), entryIdx_(entryIdx), result_(NOCHANGE) {}
+    entry_(entry), entryIdx_(entryIdx), result_(QUIZ_NOCHANGE) {}
   
   const Entry& entry() const { return entry_; }
   int index() const { return entryIdx_; }
@@ -68,7 +70,7 @@ protected:
   
 public:
   Quiz(DatabaseInterface *database, const QuizSettings &settings);
-  Quiz(DatabaseInterface *database, const QuizDirection type, const QList<int> &idxs);
+  Quiz(DatabaseInterface *database, const QuizDirection type, const std::list<int> &idxs);
   
   int questionCount() const { return static_cast<int>( questions_.size() ); }
   bool empty() const { return questions_.empty(); }
@@ -83,7 +85,7 @@ public:
   void saveResults();
   
 protected:
-  void addByIndex(const QList<int> &idxs);
+  void addByIndex(const std::list<int> &idxs);
   void addByRange(int from, int to);
   void addAll();
   

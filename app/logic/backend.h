@@ -29,7 +29,16 @@ public:
   Q_ENUM(Answer)
   Q_ENUM(Result)
   
-private:
+protected:
+  enum Operation {
+    OP_NONE, OP_ENTRY_ADD, OP_ENTRY_DEL, OP_ENTRY_COPY, OP_ENTRY_MOVE, OP_ENTRY_EDIT, OP_ENTRY_FIND, OP_QUIZ 
+  };
+  enum Notification { DBASE_NULL, DBASE_LOCKED };
+  
+  static const std::map<Operation, std::string> OP_STR;
+  static const std::map<Answer, std::string> ANS_STR;
+  static const QString TITLE_DUPLICATE;
+  
   QList<db::Database*> databases_;
   db::Database *curDbase_;
   db::Model *dbaseModel_;
@@ -62,6 +71,7 @@ public:
   void dbaseReset();
   void quizStart(const QModelIndexList &selection, const db::QuizSettings &settings);
   void quizAnswer(const Result res);
+  void quizInterrupt(const bool ignorable);
   
 signals:
   void warning(const QString &title, const QString &msg);
@@ -80,11 +90,6 @@ signals:
   void quizFinished(const QString &title, const QString &stats);
   
 protected:
-  enum Operation {
-    OP_NONE, OP_ENTRY_ADD, OP_ENTRY_DEL, OP_ENTRY_COPY, OP_ENTRY_MOVE, OP_ENTRY_EDIT, OP_ENTRY_FIND, OP_QUIZ 
-  };
-  enum Notification { DBASE_NULL, DBASE_LOCKED };
-  
   db::Database* database(const QString &name) const;
   QString dbasePath(const db::Database *db) const;
   void notify(const Notification type);
@@ -94,6 +99,11 @@ protected:
   void continueOperation();
   bool handleDuplicate(const db::Error &error, const db::Database *dbase, const QString &item, const QString &desc);
   void finishQuiz(const bool saveResults);
+  void continueAdd();
+  void continueDel();
+  void continueCopy();
+  void continueEdit();
+  void continueFind();
   void continueQuiz();
 };
 

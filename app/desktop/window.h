@@ -154,20 +154,6 @@ protected:
   void closeEvent(QCloseEvent *event);
 };
 
-class QuizDialogEventFilter : public QObject {
-  Q_OBJECT
-  
-protected:
-  QDialog *parent_;
-  Ui::QuizDialog *dialogUI_;
-  
-public:
-  QuizDialogEventFilter(QDialog *parent, Ui::QuizDialog *dialogUI);
-  
-protected:
-  bool eventFilter(QObject *obj, QEvent *event);
-};
-
 } // namespace app
 } // namespace wynn
 

@@ -46,7 +46,7 @@ Quiz::Quiz(DatabaseInterface *database, const QuizSettings &settings)
   randomizeOrder();
 }
 
-Quiz::Quiz(DatabaseInterface *database, const QuizDirection type, const QList<int> &idxs) 
+Quiz::Quiz(DatabaseInterface *database, const QuizDirection type, const std::list<int> &idxs) 
   : dbase_(database), type_(type) {
   QLOGX("Creating new quiz from database '" << dbase_->name() << "', items: " << dbase_->entryCount()
         << ", from provided list of " << idxs.size() << " indices, type: " << type_);
@@ -99,11 +99,11 @@ void Quiz::answer(const QuizAnswer ans) {
   if (finished())
     return;
   
-  QuizResult res = NOCHANGE;
+  QuizResult res = QUIZ_NOCHANGE;
   switch (ans) {
-  case ANS_CORRECT:   res = SUCCESS;  stats_.correct++;   break;
-  case ANS_INCORRECT: res = FAIL;     stats_.incorrect++; break;
-  case ANS_UNSURE:    res = NOCHANGE; stats_.unsure++;    break;
+  case ANS_CORRECT:   res = QUIZ_SUCCESS;  stats_.correct++;   break;
+  case ANS_INCORRECT: res = QUIZ_FAIL;     stats_.incorrect++; break;
+  case ANS_UNSURE:    res = QUIZ_NOCHANGE; stats_.unsure++;    break;
   }
   questions_[stats_.curQuestion++].setResult(res);
 }
@@ -112,12 +112,12 @@ void Quiz::saveResults() {
   QLOGX("Saving quiz results back to database");
   // update entries only up to the answered question index
   for ( auto &q : questions_ ) {
-    if ( q.result() == NOCHANGE )
+    if ( q.result() == QUIZ_NOCHANGE )
       continue;
     
     switch ( q.result() ) {
-    case SUCCESS: dbase_->point(q.index(), type_); break;
-    case FAIL:    dbase_->fail(q.index(), type_);  break;
+    case QUIZ_SUCCESS: dbase_->point(q.index(), type_); break;
+    case QUIZ_FAIL:    dbase_->fail(q.index(), type_);  break;
     default: break;
     }
   }
@@ -132,11 +132,9 @@ void Quiz::logQuestions() {
 #endif
 }
 
-void Quiz::addByIndex(const QList<int> &idxs) {
+void Quiz::addByIndex(const std::list<int> &idxs) {
   QLOGX("Adding  " << idxs.count() << " questions.");
-  for (int i : idxs) {
-    questions_.emplace_back(dbase_->entry(i), i);
-  }
+  for (int i : idxs) questions_.emplace_back(dbase_->entry(i), i);
   logQuestions();
 }
 
@@ -146,25 +144,20 @@ void Quiz::addByRange(int from, int to) {
   from--;
   to--;
   QLOGX("Range from: " << from << ", to: " << to);
-  for (int i = from; i <= to; ++i) {
-    questions_.emplace_back(dbase_->entry(i), i);
-  }
+  for (int i = from; i <= to; ++i) questions_.emplace_back(dbase_->entry(i), i);
   logQuestions();
 }
 
 void Quiz::addAll() {
   QLOGX("Adding  " << dbase_->entryCount() << " questions.");
-  for (int i = 0; i < dbase_->entryCount(); ++i) {
-    questions_.emplace_back(dbase_->entry(i), i);
-  }
+  for (int i = 0; i < dbase_->entryCount(); ++i) questions_.emplace_back(dbase_->entry(i), i);
   logQuestions();
 }
 
 void Quiz::eliminateByLevel(int from, int to) {
   Q_ASSERT(to > from);
   QLOGX("Eliminating quiz questions by level, from: " << from << ", to: " << to);
-  for (auto it = questions_.begin(); it != questions_.end();)
-  {
+  for (auto it = questions_.begin(); it != questions_.end();) {
     const Entry& entry = it->entry();
     const int level = entry.level(type_);
     
