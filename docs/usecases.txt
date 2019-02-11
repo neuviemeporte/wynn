@@ -86,3 +86,27 @@ WYNN_1.12: database quiz
 WYNN_2.1: switch dictionary plugin
 1. user switches plugin in combobox in dictionary panel (or combobox self-selects)
 2. contents of dictionary panel change to show the interface of the selected language
+
+WYNN_2.2 show dictionary "about" contents
+1. User clicks a button requesting information about a language plugin
+2. dialog is shown with plugin information
+
+WYNN_2.3: perform dictionary search
+1. User inputs various search criteria into the dictionary UI specific to the current language 
+and e.g. hits search button to perform search
+2. dictionary search results table is populated with matching entries from the dictionary
+
+WYNN_2.4: show dictionary result details
+1. User activates an entry in the dictionary search results table
+2. detailed information is displayed about the entry, e.g. in separate dialog
+
+WYNN_2.5: add dictionary result to database
+1. User selects one or more entries in the dictionary search results and clicks the button
+to store them in a database
+2. dialog for adding entry to database is shown allowing them to edit the entry contents 
+if necessary
+3. Continue from [WYNN_1.5.2b]
+
+WYNN_2.6: resize columns in dictionary results [deprecated, should adapt automatically]
+1. User drags width of columns in the dictionary search results table
+2. Column widths are saved and persist across application restarts for the current language

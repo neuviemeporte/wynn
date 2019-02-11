@@ -380,7 +380,7 @@ ui::slot_quiz_cancelClicked():
     ignorable = quizDialog.visible();
     backend.quizInterrupt(ignorable);
 
-backend::quizInterrupt(ignorable)
+backend::quizInterrupt(ignorable):
     !quiz.haveAnswers():
         finishQuiz(false);
         return;
@@ -388,3 +388,51 @@ backend::quizInterrupt(ignorable)
     emit question("Save partial results?", options) 
         -> ui::slot_backend_question()
 
+ExtBackend: Backend:
+    List<DictionaryPlugin> plugins;
+    DictionaryPlugin curPlugin;
+    DictionaryModel dictModel;
+    List<Index> dictSelection;
+
+ui::slot_dict_switchLanguage():
+    name = langCombo.text();
+    backend.dictSwitchLang(name);
+
+backend::dictSwitchLang(name):
+    curPlugin:
+        curPlugin.deactivate();
+    curPlugin = plugin(name);
+    dictModel.setSource(curPlugin);
+    curPlugin.activate();
+    index = curPlugin.index();
+    langChanged(index) -> ui.slot_backend_langChanged()
+
+ui.slot_backend_langChanged(index):
+    curStackWidget->hide();
+    stackWidget->setIndex(index);
+
+ui::slot_dict_langAboutClicked():
+    backend.dictAboutLang();
+
+backend::dictAboutLang():
+    information(curPlugin.name(), curPlugin.description()) 
+        -> ui.slot_backend_information();
+
+ui::slot_backend_information(title, msg):
+    MsgBox::information(title, msg);
+
+ui::slot_dict_detailsClicked():
+    selection = dictSelection();
+    backend.dictDetails(selection);
+
+backend::dictDetails(selection):
+    curPlugin.showResultDetails(selection);
+
+ui::slot_dict_storeClicked():
+    selection = dictSelection();
+    backend.dictStore(selection);
+
+backend::dictStore(selection):
+    item,desc = curPlugin.getResultForDatabase(selection);
+    curOp = ENTRY_ADD;
+    dbaseEntry(item, desc) -> ui.slot_backend_dbaseEntry();
